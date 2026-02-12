@@ -1,16 +1,16 @@
 # Prompt Copilot MVP
 
-Prompt Copilot is a desktop-first Next.js web app for stable prompt generation under a locked narrative core.
+Prompt Copilot is a desktop-first `Cinema Studio` for creators and producers. The app helps users pick a visual setup, adapt it in a simple studio panel, and export provider-specific prompt packs.
 
-## Features (MVP)
+## Features (Current MVP)
 
-- Locked Core Prompt editor (`character/style/composition/negative/text policy`)
-- Scene Cards CRUD
-- Technique Library CRUD
-- Variation Engine with deterministic seeds and controlled axes (`camera/emotion/motion`)
-- Run History with best-variant selection and 1-click reuse
-- QC scoring (`character/composition/artifact/text safety`) with pass/fail threshold
-- Prompt copy and JSON/CSV export
+- Tabbed UX: `Галерея`, `Студия`, `Пакеты`, `Справочник`
+- Gallery with visual references and modal prompt examples
+- `Kling` and `Nano Banana Pro` prompt preview tabs
+- Studio controls (`Camera`, `Lens`, `Focal`, `Aperture`, `Lighting`, `Movement`)
+- `Locked Core (Advanced)` block for consistency controls
+- Prompt Pack generator with 6 controlled variants
+- Pack history with reopen, copy, JSON export, CSV export
 
 ## Tech Stack
 
@@ -48,18 +48,6 @@ Notes for Pages mode:
 - The app runs in local mode (`localStorage` persistence) because GitHub Pages is static hosting.
 - API route handlers are temporarily excluded during `build:pages` by `/Users/chinaski89/Desktop/creator's hub/scripts/build-pages.mjs`.
 
-## API Surface
-
-- `GET/PUT /api/locked-core`
-- `GET/POST/PUT/DELETE /api/scenes`
-- `GET/POST/PUT/DELETE /api/techniques`
-- `POST /api/runs/generate`
-- `GET /api/runs`
-- `GET /api/runs/:id`
-- `PATCH /api/variants/:id/qc`
-- `PATCH /api/runs/:id/best`
-- `GET /api/runs/:id/export?format=json|csv`
-
 ## Testing
 
 ```bash
@@ -70,12 +58,11 @@ pnpm test:e2e
 
 Acceptance target:
 
-1. Create one scene and one technique
-2. Generate 12 variants
-3. Apply QC and filter by threshold
-4. Mark best variant
-5. Export JSON/CSV package
-6. Reopen historical run in one click
+1. Open gallery and apply a preset into studio
+2. Build a prompt pack (6 variants)
+3. Switch between Kling/Nano prompt previews
+4. Open Packs tab and export JSON/CSV
+5. Reopen saved pack into Studio
 
 ## Storage Notes
 
@@ -84,5 +71,5 @@ Acceptance target:
 
 ## Out of Scope (MVP)
 
-- Provider-side generation execution (Kling/Nano Banana Pro)
+- Provider-side generation execution API
 - Billing, CRM, multi-user, production-grade persistence
