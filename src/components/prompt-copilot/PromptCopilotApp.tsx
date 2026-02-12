@@ -75,6 +75,8 @@ const LIGHTING_OPTIONS = [
   "Beauty dish frontal",
 ] as const;
 
+const FOCAL_LENGTH_PRESETS = [16, 24, 28, 35, 50, 85, 105, 135, 200] as const;
+
 type StudioViewKey = "tasks" | "cameras" | "reference";
 
 function toSlug(value: string): string {
@@ -82,6 +84,22 @@ function toSlug(value: string): string {
     .toLowerCase()
     .replaceAll(/[^a-z0-9]+/g, "-")
     .replaceAll(/^-+|-+$/g, "");
+}
+
+function focalLengthHint(value: number): string {
+  if (value <= 24) {
+    return "Широкий угол для окружения и пространства.";
+  }
+  if (value <= 35) {
+    return "Универсальный репортажный угол.";
+  }
+  if (value <= 60) {
+    return "Нейтральный универсальный диапазон.";
+  }
+  if (value <= 105) {
+    return "Портрет/деталь с мягкой компрессией.";
+  }
+  return "Теледиапазон для дальних планов и сжатой перспективы.";
 }
 
 function createSetupFromPreset(preset: GalleryPreset): StudioSetup {
@@ -339,6 +357,10 @@ export default function PromptCopilotApp() {
     });
   }, [studioQuery]);
 
+  const activeStudioCamera = useMemo(() => {
+    return STUDIO_CAMERA_LIBRARY.find((camera) => camera.name === studioSetup.core6.camera_format) ?? null;
+  }, [studioSetup.core6.camera_format]);
+
   const activePack = useMemo(() => {
     if (!activePackId) {
       return packs[0] ?? null;
@@ -434,6 +456,16 @@ export default function PromptCopilotApp() {
     setGeneratedPack(pack);
     setActiveTab("studio");
     setSafeMessage(`Пакет ${pack.id} открыт в Студии`);
+  };
+
+  const updateCore6 = <K extends keyof Core6Setup>(key: K, value: Core6Setup[K]) => {
+    setStudioSetup((current) => ({
+      ...current,
+      core6: {
+        ...current.core6,
+        [key]: value,
+      },
+    }));
   };
 
   const tabClass = (tab: TabKey): string =>
@@ -750,34 +782,239 @@ export default function PromptCopilotApp() {
             </aside>
 
             {promptDrawerOpen ? (
-              <section
-                data-testid="studio-prompt-drawer"
-                className="rounded-3xl border border-white/10 bg-[#07080a]/95 p-4 backdrop-blur-md md:p-6"
-              >
-                <div className="flex items-center justify-between">
-                  <h3 className="font-display text-xl font-semibold tracking-tight">Итоговый промпт</h3>
-                  <button
-                    type="button"
-                    data-testid="studio-close-prompt-drawer"
-                    className="rounded-full border border-white/20 bg-white/[0.06] px-3 py-1 text-xs text-zinc-200 transition hover:bg-white/[0.14]"
-                    onClick={() => setPromptDrawerOpen(false)}
-                  >
-                    Закрыть
-                  </button>
-                </div>
-                <pre className="mt-3 max-h-[360px] overflow-auto rounded-2xl border border-white/10 bg-[#0d0e12] p-3 text-xs leading-relaxed text-zinc-200 whitespace-pre-wrap">
-                  {variantPrompt(livePreview.variants[0]!)}
-                </pre>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    className="rounded-full border border-white/20 bg-white/[0.06] px-3 py-1 text-xs text-zinc-200 transition hover:bg-white/[0.14]"
-                    onClick={() => void handleCopyText(variantPrompt(livePreview.variants[0]!))}
-                  >
-                    Скопировать промпт
-                  </button>
-                </div>
-              </section>
+              <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/75 p-3 md:p-6">
+                <section
+                  data-testid="studio-split-view"
+                  className="max-h-[95vh] w-full max-w-[1500px] overflow-hidden rounded-3xl border border-white/15 bg-[#07080a] shadow-[0_40px_140px_rgba(0,0,0,0.7)]"
+                >
+                  <div className="flex items-center justify-between border-b border-white/10 px-4 py-3 md:px-5">
+                    <div>
+                      <h3 className="font-display text-xl font-semibold tracking-tight text-zinc-100">Точная настройка + итоговый промпт</h3>
+                      <p className="text-xs text-zinc-400">Слева настрой параметры, справа сразу смотри итоговый текст.</p>
+                    </div>
+                    <button
+                      type="button"
+                      data-testid="studio-close-prompt-drawer"
+                      className="rounded-full border border-white/20 bg-white/[0.06] px-3 py-1 text-xs text-zinc-200 transition hover:bg-white/[0.14]"
+                      onClick={() => setPromptDrawerOpen(false)}
+                    >
+                      Закрыть
+                    </button>
+                  </div>
+
+                  <div className="grid max-h-[calc(95vh-72px)] gap-0 xl:grid-cols-[1fr_1fr]">
+                    <div className="overflow-auto border-b border-white/10 p-4 md:p-5 xl:border-b-0 xl:border-r">
+                      <div className="space-y-3">
+                        <label className="space-y-1">
+                          <span className="text-[11px] uppercase tracking-[0.16em] text-zinc-400">Цель сцены</span>
+                          <input
+                            data-testid="scene-goal-input"
+                            className="w-full rounded-xl border border-white/15 bg-[#101116] px-3 py-2 text-sm text-zinc-100"
+                            value={studioSetup.scene_goal}
+                            onChange={(event) => setStudioSetup((current) => ({ ...current, scene_goal: event.target.value }))}
+                          />
+                        </label>
+                        <label className="space-y-1">
+                          <span className="text-[11px] uppercase tracking-[0.16em] text-zinc-400">Действие сцены</span>
+                          <input
+                            data-testid="scene-action-input"
+                            className="w-full rounded-xl border border-white/15 bg-[#101116] px-3 py-2 text-sm text-zinc-100"
+                            value={studioSetup.scene_action}
+                            onChange={(event) => setStudioSetup((current) => ({ ...current, scene_action: event.target.value }))}
+                          />
+                        </label>
+                        <label className="space-y-1">
+                          <span className="text-[11px] uppercase tracking-[0.16em] text-zinc-400">Окружение сцены</span>
+                          <input
+                            data-testid="scene-environment-input"
+                            className="w-full rounded-xl border border-white/15 bg-[#101116] px-3 py-2 text-sm text-zinc-100"
+                            value={studioSetup.scene_environment}
+                            onChange={(event) => setStudioSetup((current) => ({ ...current, scene_environment: event.target.value }))}
+                          />
+                        </label>
+                      </div>
+
+                      <div className="mt-4 grid gap-3 md:grid-cols-2">
+                        <article className="rounded-2xl border border-white/10 bg-[#101116] p-3 md:col-span-2">
+                          <p className="text-[11px] uppercase tracking-[0.16em] text-zinc-400">Камера</p>
+                          <select
+                            data-testid="pro-camera-select"
+                            className="mt-2 w-full rounded-lg border border-white/15 bg-[#0e1015] px-2 py-2 text-sm text-zinc-100"
+                            value={studioSetup.core6.camera_format}
+                            onChange={(event) => updateCore6("camera_format", event.target.value)}
+                          >
+                            {CAMERA_FORMAT_OPTIONS.map((option) => (
+                              <option key={option} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </select>
+                          {activeStudioCamera ? (
+                            <p className="mt-2 text-xs leading-relaxed text-zinc-400">
+                              {activeStudioCamera.character}
+                              <span className="text-zinc-300"> Лучше для: {activeStudioCamera.best_for.join(", ")}.</span>
+                            </p>
+                          ) : null}
+                        </article>
+
+                        <article className="rounded-2xl border border-white/10 bg-[#101116] p-3">
+                          <p className="text-[11px] uppercase tracking-[0.16em] text-zinc-400">Объектив</p>
+                          <select
+                            className="mt-2 w-full rounded-lg border border-white/15 bg-[#0e1015] px-2 py-2 text-sm text-zinc-100"
+                            value={studioSetup.core6.lens_type}
+                            onChange={(event) => updateCore6("lens_type", event.target.value)}
+                          >
+                            {LENS_OPTIONS.map((option) => (
+                              <option key={option} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </select>
+                        </article>
+
+                        <article className="rounded-2xl border border-white/10 bg-[#101116] p-3">
+                          <p className="text-[11px] uppercase tracking-[0.16em] text-zinc-400">Диафрагма</p>
+                          <select
+                            className="mt-2 w-full rounded-lg border border-white/15 bg-[#0e1015] px-2 py-2 text-sm text-zinc-100"
+                            value={studioSetup.core6.aperture}
+                            onChange={(event) => updateCore6("aperture", event.target.value)}
+                          >
+                            {APERTURE_OPTIONS.map((option) => (
+                              <option key={option} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </select>
+                        </article>
+
+                        <article className="rounded-2xl border border-white/10 bg-[#101116] p-3 md:col-span-2">
+                          <p className="text-[11px] uppercase tracking-[0.16em] text-zinc-400">
+                            Фокусное расстояние: {studioSetup.core6.focal_length_mm} мм
+                          </p>
+                          <input
+                            type="range"
+                            min={14}
+                            max={200}
+                            step={1}
+                            value={studioSetup.core6.focal_length_mm}
+                            onChange={(event) => updateCore6("focal_length_mm", Number(event.target.value))}
+                            className="mt-2 w-full accent-white"
+                          />
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            {FOCAL_LENGTH_PRESETS.map((preset) => (
+                              <button
+                                key={preset}
+                                type="button"
+                                className={`rounded-full border px-2 py-1 text-[11px] transition ${
+                                  studioSetup.core6.focal_length_mm === preset
+                                    ? "border-white/40 bg-white text-zinc-950"
+                                    : "border-white/15 bg-white/[0.04] text-zinc-300 hover:bg-white/[0.1]"
+                                }`}
+                                onClick={() => updateCore6("focal_length_mm", preset)}
+                              >
+                                {preset} мм
+                              </button>
+                            ))}
+                          </div>
+                          <p className="mt-2 text-xs text-zinc-400">{focalLengthHint(studioSetup.core6.focal_length_mm)}</p>
+                        </article>
+
+                        <article className="rounded-2xl border border-white/10 bg-[#101116] p-3 md:col-span-2">
+                          <p className="text-[11px] uppercase tracking-[0.16em] text-zinc-400">Свет</p>
+                          <select
+                            className="mt-2 w-full rounded-lg border border-white/15 bg-[#0e1015] px-2 py-2 text-sm text-zinc-100"
+                            value={studioSetup.core6.lighting_style}
+                            onChange={(event) => updateCore6("lighting_style", event.target.value)}
+                          >
+                            {LIGHTING_OPTIONS.map((option) => (
+                              <option key={option} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </select>
+                        </article>
+                      </div>
+
+                      <details className="mt-4 rounded-2xl border border-white/10 bg-[#101116] p-3">
+                        <summary className="cursor-pointer text-sm font-medium text-zinc-200">Locked Core</summary>
+                        <div className="mt-3 grid gap-2">
+                          <textarea
+                            className="h-16 w-full rounded-lg border border-white/15 bg-[#0e1015] px-2 py-2 text-xs text-zinc-200"
+                            value={studioSetup.locked_core.character_lock}
+                            onChange={(event) =>
+                              setStudioSetup((current) => ({
+                                ...current,
+                                locked_core: { ...current.locked_core, character_lock: event.target.value },
+                              }))
+                            }
+                          />
+                          <textarea
+                            className="h-16 w-full rounded-lg border border-white/15 bg-[#0e1015] px-2 py-2 text-xs text-zinc-200"
+                            value={studioSetup.locked_core.style_lock}
+                            onChange={(event) =>
+                              setStudioSetup((current) => ({
+                                ...current,
+                                locked_core: { ...current.locked_core, style_lock: event.target.value },
+                              }))
+                            }
+                          />
+                          <textarea
+                            className="h-16 w-full rounded-lg border border-white/15 bg-[#0e1015] px-2 py-2 text-xs text-zinc-200"
+                            value={studioSetup.locked_core.composition_lock}
+                            onChange={(event) =>
+                              setStudioSetup((current) => ({
+                                ...current,
+                                locked_core: { ...current.locked_core, composition_lock: event.target.value },
+                              }))
+                            }
+                          />
+                          <textarea
+                            className="h-16 w-full rounded-lg border border-white/15 bg-[#0e1015] px-2 py-2 text-xs text-zinc-200"
+                            value={studioSetup.locked_core.negative_lock}
+                            onChange={(event) =>
+                              setStudioSetup((current) => ({
+                                ...current,
+                                locked_core: { ...current.locked_core, negative_lock: event.target.value },
+                              }))
+                            }
+                          />
+                        </div>
+                      </details>
+                    </div>
+
+                    <div className="overflow-auto p-4 md:p-5">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <h4 className="font-display text-lg font-semibold tracking-tight text-zinc-100">Итоговый промпт</h4>
+                        <span className="rounded-full border border-white/15 bg-[#101116] px-3 py-1 text-xs text-zinc-300">
+                          Nano Banana Pro
+                        </span>
+                      </div>
+                      <pre
+                        data-testid="studio-prompt-text"
+                        className="mt-3 max-h-[500px] overflow-auto rounded-2xl border border-white/10 bg-[#0d0e12] p-3 text-xs leading-relaxed text-zinc-200 whitespace-pre-wrap"
+                      >
+                        {variantPrompt(livePreview.variants[0]!)}
+                      </pre>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          className="rounded-full border border-white/20 bg-white/[0.06] px-3 py-1 text-xs text-zinc-200 transition hover:bg-white/[0.14]"
+                          onClick={() => void handleCopyText(variantPrompt(livePreview.variants[0]!))}
+                        >
+                          Скопировать промпт
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded-full bg-white px-4 py-1 text-xs font-semibold text-zinc-950 transition hover:bg-zinc-200"
+                          onClick={handleGeneratePack}
+                        >
+                          Собрать Prompt Pack (6)
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+              </div>
             ) : null}
 
             <section className="rounded-3xl border border-white/10 bg-[#07080a]/95 p-4 backdrop-blur-md md:p-6">

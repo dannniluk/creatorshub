@@ -33,9 +33,14 @@ test("cinema studio flow: gallery -> studio -> packs", async ({ page }) => {
   await page.getByTestId("studio-task-apply-food-macro").click();
   await expect(page.getByTestId("studio-current-setup")).toContainText("Sony A1");
   await page.getByTestId("studio-open-prompt-drawer").click();
-  await expect(page.getByTestId("studio-prompt-drawer")).toBeVisible();
+  await expect(page.getByTestId("studio-split-view")).toBeVisible();
+  await expect(page.getByTestId("pro-camera-select")).toBeVisible();
+  await page.getByTestId("pro-camera-select").selectOption("Canon EOS R5");
+  await expect(page.getByTestId("studio-current-setup")).toContainText("Canon EOS R5");
+  await expect(page.getByTestId("studio-prompt-text")).toBeVisible();
   await expect(page.getByText("Nano Banana Pro Prompt")).toBeVisible();
   await page.getByTestId("studio-close-prompt-drawer").click();
+  await expect(page.getByTestId("studio-split-view")).toHaveCount(0);
   await page.getByTestId("studio-view-cameras").click();
   await expect(page.getByTestId("studio-camera-card")).toHaveCount(9);
   await page.getByTestId("studio-camera-apply-red-v-raptor-8k-vv").click();
