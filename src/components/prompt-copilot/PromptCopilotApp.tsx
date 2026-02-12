@@ -13,7 +13,6 @@ import type {
 } from "@/lib/studio/types";
 
 type TabKey = "gallery" | "studio" | "packs" | "reference";
-type GallerySortKey = "featured" | "title-asc" | "title-desc" | "shot";
 
 const STORAGE_KEYS = {
   setup: "prompt-copilot/cinema/setup",
@@ -64,19 +63,6 @@ const LIGHTING_OPTIONS = [
   "Blue hour ambient",
   "Softbox overhead",
   "Beauty dish frontal",
-] as const;
-
-const MOVEMENT_OPTIONS = [
-  "Статичный кадр",
-  "Медленный наезд",
-  "Плавный параллакс",
-  "Мягкий handheld",
-  "Энергичный проход вперед",
-  "Круговой облет",
-  "Панорама слева направо",
-  "Панорама сверху вниз",
-  "Долли-аут",
-  "Орбитальное движение",
 ] as const;
 
 const FOCAL_LENGTH_PRESETS = [16, 24, 28, 35, 50, 85, 105, 135, 200] as const;
@@ -189,7 +175,7 @@ export default function PromptCopilotApp() {
           focal_length_mm: 35,
           aperture: APERTURE_OPTIONS[2],
           lighting_style: LIGHTING_OPTIONS[1],
-          camera_movement: MOVEMENT_OPTIONS[1],
+          camera_movement: "Статичный кадр",
         },
         locked_core: {
           character_lock: "",
@@ -208,7 +194,6 @@ export default function PromptCopilotApp() {
     return safeParse<TabKey>(localStorage.getItem(STORAGE_KEYS.tab)) ?? "gallery";
   });
   const [galleryQuery, setGalleryQuery] = useState("");
-  const [gallerySort, setGallerySort] = useState<GallerySortKey>("featured");
   const [galleryCategory, setGalleryCategory] = useState("Все");
 
   const [studioSetup, setStudioSetup] = useState<StudioSetup>(() => {
@@ -255,7 +240,7 @@ export default function PromptCopilotApp() {
 
   useEffect(() => {
     setVisiblePresetCount(GALLERY_CHUNK_SIZE);
-  }, [galleryQuery, gallerySort, galleryCategory]);
+  }, [galleryQuery, galleryCategory]);
 
   useEffect(() => {
     if (!toast) {
@@ -289,17 +274,8 @@ export default function PromptCopilotApp() {
         })
       : categoryFiltered;
 
-    const sorted = [...byQuery];
-    if (gallerySort === "title-asc") {
-      sorted.sort((a, b) => a.title.localeCompare(b.title, "ru"));
-    } else if (gallerySort === "title-desc") {
-      sorted.sort((a, b) => b.title.localeCompare(a.title, "ru"));
-    } else if (gallerySort === "shot") {
-      sorted.sort((a, b) => a.shot_type.localeCompare(b.shot_type, "ru"));
-    }
-
-    return sorted;
-  }, [galleryQuery, gallerySort, galleryCategory]);
+    return byQuery;
+  }, [galleryQuery, galleryCategory]);
 
   const galleryCategories = useMemo(() => {
     const unique = Array.from(new Set(DEFAULT_GALLERY_PRESETS.map((preset) => preset.category)));
@@ -438,7 +414,6 @@ export default function PromptCopilotApp() {
                   value={galleryQuery}
                   onChange={(event) => setGalleryQuery(event.target.value)}
                 />
-                <span className="rounded-full bg-white/[0.06] px-2 py-1 text-xs text-zinc-400">⌘K</span>
               </div>
             </div>
 
@@ -475,17 +450,6 @@ export default function PromptCopilotApp() {
             </div>
 
             <div className="mb-4 flex flex-wrap items-center gap-2">
-              <select
-                data-testid="gallery-sort-select"
-                className="rounded-full border border-white/15 bg-[#12131a] px-4 py-2 text-sm text-zinc-200 outline-none"
-                value={gallerySort}
-                onChange={(event) => setGallerySort(event.target.value as GallerySortKey)}
-              >
-                <option value="featured">Сортировка: по умолчанию</option>
-                <option value="title-asc">Сортировка: название А-Я</option>
-                <option value="title-desc">Сортировка: название Я-А</option>
-                <option value="shot">Сортировка: тип кадра</option>
-              </select>
               {galleryCategories.map((category) => (
                 <button
                   key={category}
@@ -581,6 +545,32 @@ export default function PromptCopilotApp() {
                 </label>
               </div>
 
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                {[
+                  {
+                    title: "Камера",
+                    text: "Влияет на пластичность цвета, динамический диапазон и характер шума. Условно: кинокамеры дают мягкий roll-off и плотный тон кожи.",
+                  },
+                  {
+                    title: "Объектив",
+                    text: "Определяет геометрию, микроконтраст и боке. Prime обычно чище и резче, anamorphic добавляет кино-искажения и горизонтальные блики.",
+                  },
+                  {
+                    title: "Фокусное расстояние",
+                    text: "Формирует перспективу: 24-35 мм для среды, 50 мм универсально, 85-135 мм для портрета и деталей без сильной дисторсии.",
+                  },
+                  {
+                    title: "Диафрагма",
+                    text: "Контролирует глубину резкости и объем света. Малые значения (f/1.4-f/2.8) дают сильное отделение объекта, f/4-f/8 делают сцену стабильнее.",
+                  },
+                ].map((item) => (
+                  <article key={item.title} className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+                    <p className="text-sm font-semibold text-zinc-200">{item.title}</p>
+                    <p className="mt-1 text-xs leading-relaxed text-zinc-400">{item.text}</p>
+                  </article>
+                ))}
+              </div>
+
               <div className="mt-5 grid gap-3 md:grid-cols-2">
                 <StudioControlCard title="Камера" value={studioSetup.core6.camera_format}>
                   <select
@@ -666,19 +656,6 @@ export default function PromptCopilotApp() {
                   </select>
                 </StudioControlCard>
 
-                <StudioControlCard title="Движение камеры" value={studioSetup.core6.camera_movement}>
-                  <select
-                    className="w-full rounded-lg border border-white/15 bg-[#101116] px-2 py-2 text-sm"
-                    value={studioSetup.core6.camera_movement}
-                    onChange={(event) => updateCore6("camera_movement", event.target.value)}
-                  >
-                    {MOVEMENT_OPTIONS.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                </StudioControlCard>
               </div>
 
               <details className="mt-5 rounded-2xl border border-white/10 bg-white/[0.03] p-4">

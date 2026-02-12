@@ -18,8 +18,8 @@ const VARIANT_RECIPES: VariantRecipe[] = [
   {
     id: "wide",
     label: "Широкий кадр",
-    summary: "Более широкий угол и легкое движение камеры",
-    overrides: { focal_length_mm: 24, camera_movement: "Плавный параллакс" },
+    summary: "Более широкий угол и чистая геометрия",
+    overrides: { focal_length_mm: 24, aperture: "f/4" },
   },
   {
     id: "tight",
@@ -30,8 +30,8 @@ const VARIANT_RECIPES: VariantRecipe[] = [
   {
     id: "dynamic",
     label: "Динамика",
-    summary: "Более выраженная динамика движения",
-    overrides: { camera_movement: "Энергичный проход вперед" },
+    summary: "Контрастная драматичная пластика света",
+    overrides: { lighting_style: "Контровой свет с плотным контрастом", lens_type: "Anamorphic Prime" },
   },
   {
     id: "soft-light",
@@ -43,7 +43,7 @@ const VARIANT_RECIPES: VariantRecipe[] = [
     id: "clean-safe",
     label: "Чистый безопасный",
     summary: "Консервативная версия для стабильного результата",
-    overrides: { aperture: "f/4", camera_movement: "Статичный кадр" },
+    overrides: { aperture: "f/4", lens_type: "Master Prime" },
   },
 ];
 
@@ -64,7 +64,6 @@ function buildCommonScene(setup: StudioSetup, core6: Core6Setup): string[] {
     `FOCAL LENGTH: ${core6.focal_length_mm}mm`,
     `APERTURE: ${core6.aperture}`,
     `LIGHTING STYLE: ${core6.lighting_style}`,
-    `CAMERA MOVEMENT: ${core6.camera_movement}`,
     `CHARACTER LOCK: ${setup.locked_core.character_lock}`,
     `STYLE LOCK: ${setup.locked_core.style_lock}`,
     `COMPOSITION LOCK: ${setup.locked_core.composition_lock}`,
