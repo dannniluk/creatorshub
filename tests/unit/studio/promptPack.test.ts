@@ -29,11 +29,10 @@ describe("generatePromptPack", () => {
     expect(pack.variants).toHaveLength(6);
   });
 
-  test("builds both provider prompt formats for every variant", () => {
+  test("builds Nano Banana Pro prompt format for every variant", () => {
     const pack = generatePromptPack({ setup: makeSetup() });
 
     for (const variant of pack.variants) {
-      expect(variant.prompt_kling).toContain("Kling Prompt");
       expect(variant.prompt_nano).toContain("Nano Banana Pro Prompt");
     }
   });
@@ -45,7 +44,6 @@ describe("generatePromptPack", () => {
     const pack = generatePromptPack({ setup });
 
     for (const variant of pack.variants) {
-      expect(variant.prompt_kling).toContain("Один и тот же актер");
       expect(variant.prompt_nano).toContain("Один и тот же актер");
     }
   });

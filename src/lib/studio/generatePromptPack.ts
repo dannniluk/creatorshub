@@ -73,16 +73,6 @@ function buildCommonScene(setup: StudioSetup, core6: Core6Setup): string[] {
   ];
 }
 
-function buildKlingPrompt(setup: StudioSetup, core6: Core6Setup): string {
-  const lines = buildCommonScene(setup, core6);
-  return [
-    "Kling Prompt",
-    "Goal: cinematic high-consistency shot with stable character identity.",
-    ...lines,
-    "OUTPUT PRIORITY: coherent anatomy, clean frame, stable mood.",
-  ].join("\n");
-}
-
 function buildNanoPrompt(setup: StudioSetup, core6: Core6Setup): string {
   const lines = buildCommonScene(setup, core6);
   return [
@@ -116,7 +106,6 @@ export function generatePromptPack(input: {
         id: recipe.id,
         label: recipe.label,
         summary: recipe.summary,
-        prompt_kling: buildKlingPrompt(input.setup, core6),
         prompt_nano: buildNanoPrompt(input.setup, core6),
       };
     }),

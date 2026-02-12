@@ -37,13 +37,21 @@ function createPreset(mood: string, shotType: string, index: number): GalleryPre
     },
     locked_core_defaults: { ...BASE_LOCKED_CORE },
     example_prompts: {
-      kling: `Kling Prompt\nMood: ${mood}\nShot: ${shotType}\nSubject: Уверенный герой в естественной драматичной среде.`,
       nano: `Nano Banana Pro Prompt\nMood: ${mood}\nShot: ${shotType}\nIntent: Фотореалистичный кадр с кинематографичной глубиной.`,
     },
   };
 }
 
-const MOODS = ["Clean Commercial", "Warm Lifestyle", "Gritty Urban", "Cinematic Drama"];
+const MOODS = [
+  "Clean Commercial",
+  "Warm Lifestyle",
+  "Gritty Urban",
+  "Cinematic Drama",
+  "Noir Night",
+  "Dreamy Pastel",
+  "Documentary Natural",
+  "Editorial Minimal",
+];
 const SHOTS = ["Establishing", "Portrait", "Detail"];
 
 export const DEFAULT_GALLERY_PRESETS: GalleryPreset[] = MOODS.flatMap((mood, moodIndex) =>

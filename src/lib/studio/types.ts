@@ -1,7 +1,5 @@
 import type { LockedCore } from "@/lib/domain/types";
 
-export type PromptProvider = "kling" | "nano";
-
 export type Core6Setup = {
   camera_format: string;
   lens_type: string;
@@ -21,7 +19,9 @@ export type GalleryPreset = {
   tags: string[];
   core6_defaults: Core6Setup;
   locked_core_defaults: LockedCore;
-  example_prompts: Record<PromptProvider, string>;
+  example_prompts: {
+    nano: string;
+  };
 };
 
 export type StudioSetup = {
@@ -38,7 +38,6 @@ export type PromptPackVariant = {
   id: string;
   label: string;
   summary: string;
-  prompt_kling: string;
   prompt_nano: string;
 };
 

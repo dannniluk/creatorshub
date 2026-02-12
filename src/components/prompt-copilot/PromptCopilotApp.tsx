@@ -9,7 +9,6 @@ import type {
   GalleryPreset,
   PromptPack,
   PromptPackVariant,
-  PromptProvider,
   StudioSetup,
 } from "@/lib/studio/types";
 
@@ -20,6 +19,8 @@ const STORAGE_KEYS = {
   packs: "prompt-copilot/cinema/packs",
   tab: "prompt-copilot/cinema/tab",
 };
+
+const GALLERY_CHUNK_SIZE = 8;
 
 const CAMERA_FORMAT_OPTIONS = [
   "Digital Full Frame",
@@ -81,16 +82,7 @@ function formatDate(iso: string): string {
 }
 
 function toCsv(packs: PromptPack[]): string {
-  const headers = [
-    "pack_id",
-    "created_at",
-    "preset_id",
-    "preset_title",
-    "variant_id",
-    "variant_label",
-    "prompt_kling",
-    "prompt_nano",
-  ];
+  const headers = ["pack_id", "created_at", "preset_id", "preset_title", "variant_id", "variant_label", "prompt_nano"];
 
   const rows = packs.flatMap((pack) =>
     pack.variants.map((variant) => [
@@ -100,7 +92,6 @@ function toCsv(packs: PromptPack[]): string {
       pack.setup_snapshot.preset_title,
       variant.id,
       variant.label,
-      variant.prompt_kling,
       variant.prompt_nano,
     ]),
   );
@@ -128,8 +119,8 @@ function downloadFile(fileName: string, content: string, contentType: string): v
   URL.revokeObjectURL(url);
 }
 
-function variantPrompt(variant: PromptPackVariant, provider: PromptProvider): string {
-  return provider === "kling" ? variant.prompt_kling : variant.prompt_nano;
+function variantPrompt(variant: PromptPackVariant): string {
+  return variant.prompt_nano;
 }
 
 function StudioControlCard({
@@ -203,9 +194,7 @@ export default function PromptCopilotApp() {
   });
   const [generatedPack, setGeneratedPack] = useState<PromptPack | null>(null);
 
-  const [selectedProvider, setSelectedProvider] = useState<PromptProvider>("kling");
-  const [modalProvider, setModalProvider] = useState<PromptProvider>("kling");
-  const [activePackProvider, setActivePackProvider] = useState<PromptProvider>("kling");
+  const [visiblePresetCount, setVisiblePresetCount] = useState(GALLERY_CHUNK_SIZE);
   const [activePackId, setActivePackId] = useState<string | null>(() => {
     if (typeof window === "undefined") {
       return null;
@@ -218,6 +207,7 @@ export default function PromptCopilotApp() {
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [copyToast, setCopyToast] = useState<{ kind: "success" | "error"; text: string } | null>(null);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.setup, JSON.stringify(studioSetup));
@@ -231,6 +221,24 @@ export default function PromptCopilotApp() {
     localStorage.setItem(STORAGE_KEYS.tab, JSON.stringify(activeTab));
   }, [activeTab]);
 
+  useEffect(() => {
+    setVisiblePresetCount(GALLERY_CHUNK_SIZE);
+  }, [galleryQuery]);
+
+  useEffect(() => {
+    if (!copyToast) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setCopyToast(null);
+    }, 1800);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [copyToast]);
+
   const filteredPresets = useMemo(() => {
     const query = galleryQuery.trim().toLowerCase();
     if (!query) {
@@ -242,6 +250,11 @@ export default function PromptCopilotApp() {
       return joined.includes(query);
     });
   }, [galleryQuery]);
+
+  const visiblePresets = useMemo(
+    () => filteredPresets.slice(0, Math.max(visiblePresetCount, GALLERY_CHUNK_SIZE)),
+    [filteredPresets, visiblePresetCount],
+  );
 
   const livePreview = useMemo(() => {
     return generatePromptPack({ setup: studioSetup, packId: "preview", createdAt: "2026-02-12T00:00:00.000Z" });
@@ -288,9 +301,9 @@ export default function PromptCopilotApp() {
   const handleCopyText = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
-      setSafeMessage("Скопировано в буфер");
+      setCopyToast({ kind: "success", text: "Скопировано в буфер обмена" });
     } catch {
-      setSafeError("Не удалось скопировать текст");
+      setCopyToast({ kind: "error", text: "Не удалось скопировать текст" });
     }
   };
 
@@ -401,19 +414,20 @@ export default function PromptCopilotApp() {
                 <p className="mt-2 text-sm text-zinc-500">Собирай референсы, чтобы улучшить выдачу в Studio.</p>
                 <div className="mt-6 rounded-2xl bg-white/[0.04] p-3">
                   <div className="h-3 rounded-full bg-white/[0.05]" />
-                  <div className="mt-3 inline-flex rounded-full bg-[#1c1d22] px-3 py-1 text-xs text-zinc-300">0/12 collected</div>
+                  <div className="mt-3 inline-flex rounded-full bg-[#1c1d22] px-3 py-1 text-xs text-zinc-300">
+                    0/{DEFAULT_GALLERY_PRESETS.length} collected
+                  </div>
                 </div>
               </aside>
 
               <div className="columns-1 gap-4 sm:columns-2 xl:columns-4">
-                {filteredPresets.map((preset, index) => (
+                {visiblePresets.map((preset, index) => (
                   <button
                     type="button"
                     key={preset.id}
                     data-testid="gallery-card"
                     className="group mb-4 block w-full break-inside-avoid overflow-hidden rounded-3xl border border-white/10 bg-white/[0.02] text-left transition hover:translate-y-[-2px] hover:border-white/25"
                     onClick={() => {
-                      setModalProvider("kling");
                       setActivePreset(preset);
                     }}
                   >
@@ -430,6 +444,17 @@ export default function PromptCopilotApp() {
                 ))}
               </div>
             </div>
+            {visiblePresetCount < filteredPresets.length ? (
+              <div className="mt-2 flex justify-center">
+                <button
+                  type="button"
+                  className="rounded-full border border-white/20 bg-white/[0.05] px-6 py-2 text-sm text-zinc-200 transition hover:bg-white/[0.12]"
+                  onClick={() => setVisiblePresetCount((current) => current + GALLERY_CHUNK_SIZE)}
+                >
+                  Еще
+                </button>
+              </div>
+            ) : null}
           </section>
         ) : null}
 
@@ -438,7 +463,7 @@ export default function PromptCopilotApp() {
             <div className="rounded-3xl border border-white/10 bg-[#07080a]/95 p-4 backdrop-blur-md md:p-6">
               <div className="mb-4">
                 <h2 className="font-display text-3xl font-semibold tracking-tight">Студия</h2>
-                <p className="mt-1 text-sm text-zinc-400">Собери сетап и получи 6 вариаций промпта под Kling и Nano Banana Pro.</p>
+                <p className="mt-1 text-sm text-zinc-400">Собери сетап и получи 6 вариаций промпта под Nano Banana Pro.</p>
               </div>
 
               <div className="grid gap-3">
@@ -618,24 +643,11 @@ export default function PromptCopilotApp() {
               <aside className="rounded-3xl border border-white/10 bg-[#07080a]/95 p-4 backdrop-blur-md md:p-6">
                 <div className="flex items-center justify-between">
                   <h3 className="font-display text-xl font-semibold tracking-tight">Live Prompt Preview</h3>
-                  <div className="flex gap-2 rounded-full border border-white/15 bg-[#101116] p-1">
-                    <button
-                      className={`rounded-full px-3 py-1 text-xs ${selectedProvider === "kling" ? "bg-white text-zinc-950" : "text-zinc-300"}`}
-                      onClick={() => setSelectedProvider("kling")}
-                    >
-                      Kling
-                    </button>
-                    <button
-                      className={`rounded-full px-3 py-1 text-xs ${selectedProvider === "nano" ? "bg-white text-zinc-950" : "text-zinc-300"}`}
-                      onClick={() => setSelectedProvider("nano")}
-                    >
-                      Nano Banana Pro
-                    </button>
-                  </div>
+                  <span className="rounded-full border border-white/15 bg-[#101116] px-3 py-1 text-xs text-zinc-300">Nano Banana Pro</span>
                 </div>
 
                 <pre className="mt-3 max-h-[360px] overflow-auto rounded-2xl border border-white/10 bg-[#0d0e12] p-3 text-xs leading-relaxed text-zinc-200 whitespace-pre-wrap">
-                  {variantPrompt(livePreview.variants[0]!, selectedProvider)}
+                  {variantPrompt(livePreview.variants[0]!)}
                 </pre>
 
                 <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] p-3">
@@ -674,13 +686,13 @@ export default function PromptCopilotApp() {
                           </div>
                           <button
                             className="rounded-full bg-white/10 px-3 py-1 text-xs text-zinc-200 hover:bg-white/20"
-                            onClick={() => void handleCopyText(variantPrompt(variant, selectedProvider))}
+                            onClick={() => void handleCopyText(variantPrompt(variant))}
                           >
                             Copy
                           </button>
                         </div>
                         <pre className="mt-2 max-h-36 overflow-auto rounded-xl border border-white/10 bg-[#0b0c10] p-2 text-[11px] whitespace-pre-wrap text-zinc-300">
-                          {variantPrompt(variant, selectedProvider)}
+                          {variantPrompt(variant)}
                         </pre>
                       </article>
                     ))}
@@ -749,20 +761,7 @@ export default function PromptCopilotApp() {
             <div className="rounded-3xl border border-white/10 bg-[#07080a]/95 p-4 backdrop-blur-md md:p-6">
               <div className="flex items-center justify-between">
                 <h3 className="font-display text-xl font-semibold tracking-tight">Просмотр пакета</h3>
-                <div className="flex gap-2 rounded-full border border-white/15 bg-[#101116] p-1">
-                  <button
-                    className={`rounded-full px-3 py-1 text-xs ${activePackProvider === "kling" ? "bg-white text-zinc-950" : "text-zinc-300"}`}
-                    onClick={() => setActivePackProvider("kling")}
-                  >
-                    Kling
-                  </button>
-                  <button
-                    className={`rounded-full px-3 py-1 text-xs ${activePackProvider === "nano" ? "bg-white text-zinc-950" : "text-zinc-300"}`}
-                    onClick={() => setActivePackProvider("nano")}
-                  >
-                    Nano
-                  </button>
-                </div>
+                <span className="rounded-full border border-white/15 bg-[#101116] px-3 py-1 text-xs text-zinc-300">Nano Banana Pro</span>
               </div>
 
               {activePack ? (
@@ -773,13 +772,13 @@ export default function PromptCopilotApp() {
                         <p className="text-sm font-semibold">{variant.label}</p>
                         <button
                           className="rounded-full bg-white/10 px-3 py-1 text-xs text-zinc-200"
-                          onClick={() => void handleCopyText(variantPrompt(variant, activePackProvider))}
+                          onClick={() => void handleCopyText(variantPrompt(variant))}
                         >
                           Copy
                         </button>
                       </div>
                       <pre className="mt-2 max-h-40 overflow-auto rounded-xl border border-white/10 bg-[#0b0c10] p-2 text-[11px] whitespace-pre-wrap text-zinc-300">
-                        {variantPrompt(variant, activePackProvider)}
+                        {variantPrompt(variant)}
                       </pre>
                     </article>
                   ))}
@@ -878,29 +877,18 @@ export default function PromptCopilotApp() {
                 className="h-full min-h-72 w-full rounded-3xl border border-white/10 object-cover"
               />
               <div>
-                <div className="flex gap-2 rounded-full border border-white/15 bg-[#101116] p-1">
-                  <button
-                    className={`rounded-full px-3 py-1 text-xs ${modalProvider === "kling" ? "bg-white text-zinc-950" : "text-zinc-300"}`}
-                    onClick={() => setModalProvider("kling")}
-                  >
-                    Kling
-                  </button>
-                  <button
-                    className={`rounded-full px-3 py-1 text-xs ${modalProvider === "nano" ? "bg-white text-zinc-950" : "text-zinc-300"}`}
-                    onClick={() => setModalProvider("nano")}
-                  >
-                    Nano Banana Pro
-                  </button>
+                <div className="inline-flex rounded-full border border-white/15 bg-[#101116] px-3 py-1 text-xs text-zinc-300">
+                  Nano Banana Pro
                 </div>
 
                 <pre className="mt-3 max-h-64 overflow-auto rounded-2xl border border-white/10 bg-[#0d0e12] p-3 text-xs leading-relaxed whitespace-pre-wrap text-zinc-200">
-                  {activePreset.example_prompts[modalProvider]}
+                  {activePreset.example_prompts.nano}
                 </pre>
 
                 <div className="mt-3 flex flex-wrap gap-2">
                   <button
                     className="rounded-full bg-white px-4 py-2 text-sm font-medium text-zinc-950"
-                    onClick={() => void handleCopyText(activePreset.example_prompts[modalProvider])}
+                    onClick={() => void handleCopyText(activePreset.example_prompts.nano)}
                   >
                     Скопировать промпт
                   </button>
@@ -914,6 +902,12 @@ export default function PromptCopilotApp() {
               </div>
             </div>
           </div>
+        </div>
+      ) : null}
+
+      {copyToast ? (
+        <div className="pointer-events-none fixed bottom-6 right-6 z-30 rounded-xl border border-white/15 bg-[#111217]/95 px-4 py-2 text-sm text-zinc-100 shadow-[0_12px_30px_rgba(0,0,0,0.45)]">
+          <span className={copyToast.kind === "error" ? "text-rose-300" : "text-emerald-300"}>{copyToast.text}</span>
         </div>
       ) : null}
     </div>
