@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { localApiRequest, shouldUseLocalApiRuntime } from "@/lib/client/localApi";
 import { DEFAULT_LOCKED_CORE, DEFAULT_QC_THRESHOLD, DEFAULT_VARIANT_COUNT } from "@/lib/domain/defaults";
 import type {
   LockedCore,
@@ -63,21 +64,50 @@ const EMPTY_QC: QcBreakdown = {
 };
 
 async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, {
-    ...init,
-    headers: {
-      "content-type": "application/json",
-      ...(init?.headers ?? {}),
-    },
-  });
-
-  const payload = (await response.json()) as ApiEnvelope<T>;
-
-  if (!response.ok || payload.error) {
-    throw new Error(payload.error ?? `Request failed: ${response.status}`);
+  if (shouldUseLocalApiRuntime()) {
+    return localApiRequest<T>(path, init);
   }
 
-  return payload.data;
+  try {
+    const response = await fetch(path, {
+      ...init,
+      headers: {
+        "content-type": "application/json",
+        ...(init?.headers ?? {}),
+      },
+    });
+
+    const contentType = response.headers.get("content-type") ?? "";
+    if (!contentType.includes("application/json")) {
+      throw new Error(`Unexpected response format from ${path}`);
+    }
+
+    const payload = (await response.json()) as ApiEnvelope<T>;
+
+    if (!response.ok || payload.error) {
+      throw new Error(payload.error ?? `Request failed: ${response.status}`);
+    }
+
+    return payload.data;
+  } catch (error) {
+    if (typeof window !== "undefined") {
+      return localApiRequest<T>(path, init);
+    }
+
+    throw error;
+  }
+}
+
+function triggerDownload(content: string, fileName: string, contentType: string): void {
+  const blob = new Blob([content], { type: contentType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 function ensureQcDraft(variant: Variant): QcBreakdown {
@@ -431,6 +461,39 @@ export default function PromptCopilotApp() {
     setVariantCount(run.variant_count);
     setThreshold(run.pass_threshold);
     setMessageSafe("Run setup loaded into generator");
+  };
+
+  const handleExportRun = async (runId: string, format: "json" | "csv") => {
+    try {
+      setBusy(true);
+      const path = `/api/runs/${runId}/export?format=${format}`;
+
+      if (shouldUseLocalApiRuntime()) {
+        if (format === "json") {
+          const payload = await localApiRequest<unknown>(path);
+          triggerDownload(JSON.stringify(payload, null, 2), `${runId}.json`, "application/json");
+        } else {
+          const csv = await localApiRequest<string>(path);
+          triggerDownload(csv, `${runId}.csv`, "text/csv;charset=utf-8");
+        }
+      } else {
+        const response = await fetch(path);
+        if (!response.ok) {
+          throw new Error(`Export failed: ${response.status}`);
+        }
+
+        const fileName = `${runId}.${format}`;
+        const content = await response.text();
+        const contentType = format === "json" ? "application/json" : "text/csv;charset=utf-8";
+        triggerDownload(content, fileName, contentType);
+      }
+
+      setMessageSafe(`Exported ${runId}.${format}`);
+    } catch (requestError) {
+      setErrorSafe(requestError instanceof Error ? requestError.message : "Failed to export run");
+    } finally {
+      setBusy(false);
+    }
   };
 
   if (loading) {
@@ -854,22 +917,22 @@ export default function PromptCopilotApp() {
                     >
                       Reuse prompt
                     </button>
-                    <a
+                    <button
+                      data-testid={`export-json-${run.id}`}
                       className="rounded bg-zinc-700 px-2 py-1 text-zinc-100"
-                      href={`/api/runs/${run.id}/export?format=json`}
-                      target="_blank"
-                      rel="noreferrer"
+                      onClick={() => void handleExportRun(run.id, "json")}
+                      disabled={busy}
                     >
                       Export JSON
-                    </a>
-                    <a
+                    </button>
+                    <button
+                      data-testid={`export-csv-${run.id}`}
                       className="rounded bg-zinc-700 px-2 py-1 text-zinc-100"
-                      href={`/api/runs/${run.id}/export?format=csv`}
-                      target="_blank"
-                      rel="noreferrer"
+                      onClick={() => void handleExportRun(run.id, "csv")}
+                      disabled={busy}
                     >
                       Export CSV
-                    </a>
+                    </button>
                   </div>
                 </article>
               ))}

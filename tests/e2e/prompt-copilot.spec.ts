@@ -68,14 +68,8 @@ test("acceptance: generate 12 variants, QC gate, export, and reopen run", async 
   await page.getByRole("checkbox", { name: "Show pass/best only" }).check();
 
   const historyItem = page.getByTestId("run-history-item").first();
-  await expect(historyItem.getByRole("link", { name: "Export JSON" })).toHaveAttribute(
-    "href",
-    /\/api\/runs\/.+\/export\?format=json/,
-  );
-  await expect(historyItem.getByRole("link", { name: "Export CSV" })).toHaveAttribute(
-    "href",
-    /\/api\/runs\/.+\/export\?format=csv/,
-  );
+  await expect(historyItem.getByRole("button", { name: "Export JSON" })).toBeVisible();
+  await expect(historyItem.getByRole("button", { name: "Export CSV" })).toBeVisible();
 
   await historyItem.getByRole("button", { name: "Open run" }).click();
   await expect(page.getByText("Active run:")).toBeVisible();

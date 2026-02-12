@@ -35,6 +35,19 @@ pnpm dev
 
 App URL: [http://localhost:3000](http://localhost:3000)
 
+## GitHub Pages
+
+Configured via workflow: `/Users/chinaski89/Desktop/creator's hub/.github/workflows/deploy-pages.yml`.
+
+Deployment URL:
+
+- [https://dannniluk.github.io/creatorshub/](https://dannniluk.github.io/creatorshub/)
+
+Notes for Pages mode:
+
+- The app runs in local mode (`localStorage` persistence) because GitHub Pages is static hosting.
+- API route handlers are temporarily excluded during `build:pages` by `/Users/chinaski89/Desktop/creator's hub/scripts/build-pages.mjs`.
+
 ## API Surface
 
 - `GET/PUT /api/locked-core`
