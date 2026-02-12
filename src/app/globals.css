@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+:root {
+  --font-sans: "Avenir Next", "Futura", "Trebuchet MS", "Helvetica Neue", sans-serif;
+  --font-mono: "IBM Plex Mono", "SFMono-Regular", Menlo, Monaco, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  font-family: var(--font-sans), sans-serif;
+}
+
+pre,
+code,
+.font-mono {
+  font-family: var(--font-mono), monospace;
+}
