@@ -11,39 +11,39 @@ type VariantRecipe = {
 const VARIANT_RECIPES: VariantRecipe[] = [
   {
     id: "base",
-    label: "Base",
+    label: "Базовый",
     summary: "Исходная настройка без дополнительных изменений",
     overrides: {},
   },
   {
     id: "wide",
-    label: "Wider Frame",
+    label: "Широкий кадр",
     summary: "Более широкий угол и легкое движение камеры",
-    overrides: { focal_length_mm: 24, camera_movement: "Smooth lateral tracking" },
+    overrides: { focal_length_mm: 24, camera_movement: "Плавный параллакс" },
   },
   {
     id: "tight",
-    label: "Tight Portrait",
+    label: "Плотный портрет",
     summary: "Более плотный портретный фокус",
     overrides: { focal_length_mm: 85, aperture: "f/2.0" },
   },
   {
     id: "dynamic",
-    label: "Dynamic Motion",
+    label: "Динамика",
     summary: "Более выраженная динамика движения",
-    overrides: { camera_movement: "Energetic forward tracking" },
+    overrides: { camera_movement: "Энергичный проход вперед" },
   },
   {
     id: "soft-light",
-    label: "Soft Light",
+    label: "Мягкий свет",
     summary: "Более мягкий свет и аккуратный контраст",
-    overrides: { lighting_style: "Soft diffused key with controlled fill" },
+    overrides: { lighting_style: "Мягкий ключ с деликатным заполнением" },
   },
   {
     id: "clean-safe",
-    label: "Safety Clean",
+    label: "Чистый безопасный",
     summary: "Консервативная версия для стабильного результата",
-    overrides: { aperture: "f/4", camera_movement: "Static locked frame" },
+    overrides: { aperture: "f/4", camera_movement: "Статичный кадр" },
   },
 ];
 

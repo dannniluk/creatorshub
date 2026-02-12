@@ -8,10 +8,30 @@ test("cinema studio flow: gallery -> studio -> packs", async ({ page }) => {
   await page.goto("/");
 
   await expect(page.getByTestId("tab-gallery")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Для вас" })).toBeVisible();
+  await expect(page.getByTestId("gallery-sort-select")).toBeVisible();
+  await expect(page.getByTestId("gallery-category-filter-all")).toBeVisible();
+  await expect(page.getByText("Connect styles")).toHaveCount(0);
+  await expect(page.getByTestId("gallery-card")).toHaveCount(8);
+  await page.getByRole("button", { name: "Еще" }).click();
+  await expect(page.getByTestId("gallery-card")).toHaveCount(16);
+
   await page.getByTestId("gallery-card").first().click();
 
   await expect(page.getByTestId("gallery-modal")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Kling" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Скопировать промпт" }).click();
+  await expect(page.getByText("Скопировано в буфер обмена")).toBeVisible();
   await page.getByRole("button", { name: "Применить в Студию" }).click();
+
+  await page.getByTestId("tab-studio").click();
+  await expect(page.getByRole("heading", { name: "Студия" })).toBeVisible();
+  await expect(page.getByText("Цель сцены")).toBeVisible();
+  await expect(page.getByRole("button", { name: /^35 мм$/ })).toBeVisible();
+
+  await page.getByTestId("tab-packs").click();
+  await page.getByTestId("brand-home-btn").click();
+  await expect(page.getByTestId("tab-gallery")).toBeVisible();
 
   await page.getByTestId("tab-studio").click();
   await page.getByTestId("scene-goal-input").fill("Показать уверенного героя в кадре");

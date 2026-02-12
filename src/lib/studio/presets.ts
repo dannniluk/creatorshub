@@ -16,7 +16,7 @@ const FOCAL_BY_SHOT: Record<string, number> = {
   detail: 85,
 };
 
-function createPreset(mood: string, shotType: string, index: number): GalleryPreset {
+function createPreset(mood: string, category: string, shotType: string, index: number): GalleryPreset {
   const shotKey = shotType.toLowerCase();
 
   return {
@@ -24,16 +24,17 @@ function createPreset(mood: string, shotType: string, index: number): GalleryPre
     title: `${mood} • ${shotType}`,
     mood,
     shot_type: shotType,
+    category,
     image_url: `https://picsum.photos/seed/cinema-${index}/1000/1300`,
     description: `Референс для настроения «${mood}» с типом кадра «${shotType}».`,
-    tags: [mood, shotType, "Cinema Studio"],
+    tags: [mood, shotType, category, "Cinema Studio"],
     core6_defaults: {
-      camera_format: mood === "Clean Commercial" ? "Digital Full Frame" : "Classic 16mm Film",
-      lens_type: mood === "Cinematic Drama" ? "Anamorphic" : "Spherical Prime",
+      camera_format: mood === "Clean Commercial" ? "Sony A1" : "ARRI ALEXA Mini LF",
+      lens_type: mood === "Cinematic Drama" ? "Anamorphic Prime" : "Spherical Prime",
       focal_length_mm: FOCAL_BY_SHOT[shotKey] ?? 35,
       aperture: mood === "Gritty Urban" ? "f/4" : "f/2.8",
-      lighting_style: mood === "Warm Lifestyle" ? "Soft warm key with gentle fill" : "Directional cinematic key",
-      camera_movement: shotType === "Establishing" ? "Slow push-in" : "Subtle handheld drift",
+      lighting_style: mood === "Warm Lifestyle" ? "Мягкий ключ с деликатным заполнением" : "Кинематографичный направленный ключ",
+      camera_movement: shotType === "Establishing" ? "Медленный наезд" : "Мягкий handheld",
     },
     locked_core_defaults: { ...BASE_LOCKED_CORE },
     example_prompts: {
@@ -42,18 +43,18 @@ function createPreset(mood: string, shotType: string, index: number): GalleryPre
   };
 }
 
-const MOODS = [
-  "Clean Commercial",
-  "Warm Lifestyle",
-  "Gritty Urban",
-  "Cinematic Drama",
-  "Noir Night",
-  "Dreamy Pastel",
-  "Documentary Natural",
-  "Editorial Minimal",
+const MOOD_CONFIGS = [
+  { mood: "Clean Commercial", category: "Мода" },
+  { mood: "Warm Lifestyle", category: "Люди" },
+  { mood: "Gritty Urban", category: "Люди" },
+  { mood: "Cinematic Drama", category: "Люди" },
+  { mood: "Noir Night", category: "Мода" },
+  { mood: "Dreamy Pastel", category: "Еда" },
+  { mood: "Documentary Natural", category: "Медицина" },
+  { mood: "Editorial Minimal", category: "Еда" },
 ];
 const SHOTS = ["Establishing", "Portrait", "Detail"];
 
-export const DEFAULT_GALLERY_PRESETS: GalleryPreset[] = MOODS.flatMap((mood, moodIndex) =>
-  SHOTS.map((shot, shotIndex) => createPreset(mood, shot, moodIndex * SHOTS.length + shotIndex + 1)),
+export const DEFAULT_GALLERY_PRESETS: GalleryPreset[] = MOOD_CONFIGS.flatMap((item, moodIndex) =>
+  SHOTS.map((shot, shotIndex) => createPreset(item.mood, item.category, shot, moodIndex * SHOTS.length + shotIndex + 1)),
 );

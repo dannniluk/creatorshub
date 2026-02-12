@@ -14,6 +14,7 @@ export type GalleryPreset = {
   title: string;
   mood: string;
   shot_type: string;
+  category: string;
   image_url: string;
   description: string;
   tags: string[];

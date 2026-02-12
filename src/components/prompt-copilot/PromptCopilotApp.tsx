@@ -13,6 +13,7 @@ import type {
 } from "@/lib/studio/types";
 
 type TabKey = "gallery" | "studio" | "packs" | "reference";
+type GallerySortKey = "featured" | "title-asc" | "title-desc" | "shot";
 
 const STORAGE_KEYS = {
   setup: "prompt-copilot/cinema/setup",
@@ -24,30 +25,61 @@ const GALLERY_CHUNK_SIZE = 8;
 
 const CAMERA_FORMAT_OPTIONS = [
   "Digital Full Frame",
+  "ARRI ALEXA Mini LF",
+  "RED V-RAPTOR 8K VV",
+  "Sony A1",
+  "Canon EOS R5",
+  "Nikon Z8",
+  "Fujifilm GFX100 II",
+  "Blackmagic URSA Mini Pro 12K",
+  "Hasselblad X2D 100C",
   "Classic 16mm Film",
-  "Super 35",
-  "Large Format",
 ] as const;
 
-const LENS_OPTIONS = ["Spherical Prime", "Anamorphic", "Vintage Prime", "Zoom"] as const;
+const LENS_OPTIONS = [
+  "Spherical Prime",
+  "Anamorphic",
+  "Anamorphic Prime",
+  "Vintage Prime",
+  "Master Prime",
+  "Zoom",
+  "Zoom Cine",
+  "Macro 100mm",
+  "Tilt-Shift",
+  "Telephoto Prime",
+] as const;
 
-const APERTURE_OPTIONS = ["f/1.8", "f/2.0", "f/2.8", "f/4", "f/5.6"] as const;
+const APERTURE_OPTIONS = ["f/1.2", "f/1.4", "f/1.8", "f/2.0", "f/2.8", "f/4", "f/5.6", "f/8"] as const;
 
 const LIGHTING_OPTIONS = [
-  "Soft warm key with gentle fill",
-  "Directional cinematic key",
-  "High contrast rim light",
-  "Overcast natural softbox",
-  "Practical motivated light",
+  "Мягкий ключ с деликатным заполнением",
+  "Кинематографичный направленный ключ",
+  "Контровой свет с плотным контрастом",
+  "Естественный свет через облачность",
+  "Практические источники в кадре",
+  "Butterfly / Paramount",
+  "Rembrandt",
+  "Split lighting",
+  "Golden hour backlight",
+  "Blue hour ambient",
+  "Softbox overhead",
+  "Beauty dish frontal",
 ] as const;
 
 const MOVEMENT_OPTIONS = [
-  "Static locked frame",
-  "Slow push-in",
-  "Smooth lateral tracking",
-  "Subtle handheld drift",
-  "Energetic forward tracking",
+  "Статичный кадр",
+  "Медленный наезд",
+  "Плавный параллакс",
+  "Мягкий handheld",
+  "Энергичный проход вперед",
+  "Круговой облет",
+  "Панорама слева направо",
+  "Панорама сверху вниз",
+  "Долли-аут",
+  "Орбитальное движение",
 ] as const;
+
+const FOCAL_LENGTH_PRESETS = [16, 24, 28, 35, 50, 85, 105, 135, 200] as const;
 
 function createSetupFromPreset(preset: GalleryPreset): StudioSetup {
   return {
@@ -176,6 +208,8 @@ export default function PromptCopilotApp() {
     return safeParse<TabKey>(localStorage.getItem(STORAGE_KEYS.tab)) ?? "gallery";
   });
   const [galleryQuery, setGalleryQuery] = useState("");
+  const [gallerySort, setGallerySort] = useState<GallerySortKey>("featured");
+  const [galleryCategory, setGalleryCategory] = useState("Все");
 
   const [studioSetup, setStudioSetup] = useState<StudioSetup>(() => {
     if (typeof window === "undefined") {
@@ -205,9 +239,7 @@ export default function PromptCopilotApp() {
   });
   const [activePreset, setActivePreset] = useState<GalleryPreset | null>(null);
 
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
-  const [copyToast, setCopyToast] = useState<{ kind: "success" | "error"; text: string } | null>(null);
+  const [toast, setToast] = useState<{ kind: "success" | "error"; text: string } | null>(null);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.setup, JSON.stringify(studioSetup));
@@ -223,33 +255,56 @@ export default function PromptCopilotApp() {
 
   useEffect(() => {
     setVisiblePresetCount(GALLERY_CHUNK_SIZE);
-  }, [galleryQuery]);
+  }, [galleryQuery, gallerySort, galleryCategory]);
 
   useEffect(() => {
-    if (!copyToast) {
+    if (!toast) {
       return;
     }
 
     const timeout = window.setTimeout(() => {
-      setCopyToast(null);
-    }, 1800);
+      setToast(null);
+    }, 2200);
 
     return () => {
       window.clearTimeout(timeout);
     };
-  }, [copyToast]);
+  }, [toast]);
 
   const filteredPresets = useMemo(() => {
     const query = galleryQuery.trim().toLowerCase();
-    if (!query) {
-      return DEFAULT_GALLERY_PRESETS;
+    const categoryFiltered = DEFAULT_GALLERY_PRESETS.filter((preset) => {
+      if (galleryCategory === "Все") {
+        return true;
+      }
+      return preset.category === galleryCategory;
+    });
+
+    const byQuery = query
+      ? categoryFiltered.filter((preset) => {
+          const joined = [preset.title, preset.mood, preset.shot_type, preset.category, preset.description, ...preset.tags]
+            .join(" ")
+            .toLowerCase();
+          return joined.includes(query);
+        })
+      : categoryFiltered;
+
+    const sorted = [...byQuery];
+    if (gallerySort === "title-asc") {
+      sorted.sort((a, b) => a.title.localeCompare(b.title, "ru"));
+    } else if (gallerySort === "title-desc") {
+      sorted.sort((a, b) => b.title.localeCompare(a.title, "ru"));
+    } else if (gallerySort === "shot") {
+      sorted.sort((a, b) => a.shot_type.localeCompare(b.shot_type, "ru"));
     }
 
-    return DEFAULT_GALLERY_PRESETS.filter((preset) => {
-      const joined = [preset.title, preset.mood, preset.shot_type, preset.description, ...preset.tags].join(" ").toLowerCase();
-      return joined.includes(query);
-    });
-  }, [galleryQuery]);
+    return sorted;
+  }, [galleryQuery, gallerySort, galleryCategory]);
+
+  const galleryCategories = useMemo(() => {
+    const unique = Array.from(new Set(DEFAULT_GALLERY_PRESETS.map((preset) => preset.category)));
+    return ["Все", ...unique];
+  }, []);
 
   const visiblePresets = useMemo(
     () => filteredPresets.slice(0, Math.max(visiblePresetCount, GALLERY_CHUNK_SIZE)),
@@ -268,25 +323,23 @@ export default function PromptCopilotApp() {
   }, [activePackId, packs]);
 
   const setSafeMessage = (value: string) => {
-    setMessage(value);
-    setError("");
+    setToast({ kind: "success", text: value });
   };
 
   const setSafeError = (value: string) => {
-    setError(value);
-    setMessage("");
+    setToast({ kind: "error", text: value });
   };
 
   const applyPresetToStudio = (preset: GalleryPreset) => {
     setStudioSetup(createSetupFromPreset(preset));
     setActiveTab("studio");
     setActivePreset(null);
-    setSafeMessage(`Пресет «${preset.title}» применен в Студию`);
+    setSafeMessage(`Пресет «${preset.title}» применен в Студии`);
   };
 
   const handleGeneratePack = () => {
     if (!studioSetup.scene_goal.trim() || !studioSetup.scene_action.trim() || !studioSetup.scene_environment.trim()) {
-      setSafeError("Заполни Goal / Action / Environment перед сборкой пакета");
+      setSafeError("Заполни цель, действие и окружение перед сборкой пакета");
       return;
     }
 
@@ -295,15 +348,15 @@ export default function PromptCopilotApp() {
     setGeneratedPack(nextPack);
     setPacks((current) => [nextPack, ...current].slice(0, 50));
     setActivePackId(nextPack.id);
-    setSafeMessage("Prompt Pack из 6 вариантов собран");
+    setSafeMessage("Пакет из 6 вариаций собран");
   };
 
   const handleCopyText = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
-      setCopyToast({ kind: "success", text: "Скопировано в буфер обмена" });
+      setToast({ kind: "success", text: "Скопировано в буфер обмена" });
     } catch {
-      setCopyToast({ kind: "error", text: "Не удалось скопировать текст" });
+      setToast({ kind: "error", text: "Не удалось скопировать текст" });
     }
   };
 
@@ -343,6 +396,15 @@ export default function PromptCopilotApp() {
 
   const galleryImageHeights = ["h-44", "h-72", "h-56", "h-80", "h-52", "h-64"] as const;
 
+  const goHome = () => {
+    setActivePreset(null);
+    setActiveTab("gallery");
+  };
+
+  const setFocalLengthPreset = (value: number) => {
+    updateCore6("focal_length_mm", value);
+  };
+
   return (
     <div className="min-h-screen bg-[#040405] text-zinc-100">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_2%,rgba(255,255,255,0.1),transparent_18%),radial-gradient(circle_at_82%_14%,rgba(255,255,255,0.06),transparent_20%)]" />
@@ -358,7 +420,13 @@ export default function PromptCopilotApp() {
                 </span>
                 <p className="font-display text-[11px] uppercase tracking-[0.34em] text-zinc-500">Cinema Studio</p>
               </div>
-              <h1 className="font-display text-4xl font-semibold tracking-tight text-zinc-100 md:text-[44px]">Prompt Copilot</h1>
+              <button
+                data-testid="brand-home-btn"
+                className="text-left font-display text-4xl font-semibold tracking-tight text-zinc-100 transition hover:text-zinc-200 md:text-[44px]"
+                onClick={goHome}
+              >
+                Prompt Copilot
+              </button>
             </div>
 
             <div className="rounded-full border border-white/10 bg-white/[0.06] px-5 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]">
@@ -392,57 +460,74 @@ export default function PromptCopilotApp() {
               </button>
             </nav>
           </div>
-          {message ? <p className="mt-3 text-sm text-emerald-300">{message}</p> : null}
-          {error ? <p className="mt-3 text-sm text-rose-300">{error}</p> : null}
         </header>
 
         {activeTab === "gallery" ? (
           <section className="mt-4 rounded-[30px] border border-white/10 bg-[#07080a]/95 p-4 shadow-[0_18px_70px_rgba(0,0,0,0.4)] md:p-6">
             <div className="mb-5 flex items-end justify-between gap-3">
               <div>
-                <h2 className="font-display text-3xl font-semibold tracking-tight">For You</h2>
+                <h2 className="font-display text-3xl font-semibold tracking-tight">Для вас</h2>
                 <p className="mt-1 text-sm text-zinc-500">Подбери референс, открой готовый промпт и перенеси стиль в Студию.</p>
               </div>
               <div className="hidden rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-xs text-zinc-400 md:block">
-                {filteredPresets.length} presets
+                {filteredPresets.length} пресетов
               </div>
             </div>
 
-            <div className="grid gap-4 xl:grid-cols-[310px_1fr]">
-              <aside className="hidden rounded-3xl border border-white/10 bg-white/[0.04] p-5 xl:block">
-                <h3 className="font-display text-2xl">Connect styles</h3>
-                <p className="mt-2 text-sm text-zinc-500">Собирай референсы, чтобы улучшить выдачу в Studio.</p>
-                <div className="mt-6 rounded-2xl bg-white/[0.04] p-3">
-                  <div className="h-3 rounded-full bg-white/[0.05]" />
-                  <div className="mt-3 inline-flex rounded-full bg-[#1c1d22] px-3 py-1 text-xs text-zinc-300">
-                    0/{DEFAULT_GALLERY_PRESETS.length} collected
-                  </div>
-                </div>
-              </aside>
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+              <select
+                data-testid="gallery-sort-select"
+                className="rounded-full border border-white/15 bg-[#12131a] px-4 py-2 text-sm text-zinc-200 outline-none"
+                value={gallerySort}
+                onChange={(event) => setGallerySort(event.target.value as GallerySortKey)}
+              >
+                <option value="featured">Сортировка: по умолчанию</option>
+                <option value="title-asc">Сортировка: название А-Я</option>
+                <option value="title-desc">Сортировка: название Я-А</option>
+                <option value="shot">Сортировка: тип кадра</option>
+              </select>
+              {galleryCategories.map((category) => (
+                <button
+                  key={category}
+                  type="button"
+                  data-testid={category === "Все" ? "gallery-category-filter-all" : `gallery-category-filter-${category.toLowerCase()}`}
+                  className={`rounded-full border px-3 py-1.5 text-xs transition ${
+                    galleryCategory === category
+                      ? "border-white/40 bg-white text-zinc-950"
+                      : "border-white/15 bg-white/[0.04] text-zinc-300 hover:bg-white/[0.1]"
+                  }`}
+                  onClick={() => setGalleryCategory(category)}
+                >
+                  {category}
+                </button>
+              ))}
+            </div>
 
-              <div className="columns-1 gap-4 sm:columns-2 xl:columns-4">
-                {visiblePresets.map((preset, index) => (
-                  <button
-                    type="button"
-                    key={preset.id}
-                    data-testid="gallery-card"
-                    className="group mb-4 block w-full break-inside-avoid overflow-hidden rounded-3xl border border-white/10 bg-white/[0.02] text-left transition hover:translate-y-[-2px] hover:border-white/25"
-                    onClick={() => {
-                      setActivePreset(preset);
-                    }}
-                  >
-                    <img
-                      src={preset.image_url}
-                      alt={preset.title}
-                      className={`w-full object-cover transition duration-500 group-hover:scale-[1.03] ${galleryImageHeights[index % galleryImageHeights.length]}`}
-                    />
-                    <div className="p-3">
-                      <p className="font-display text-base text-zinc-100">{preset.title}</p>
-                      <p className="mt-1 text-xs text-zinc-500">{preset.description}</p>
-                    </div>
-                  </button>
-                ))}
-              </div>
+            <div className="columns-1 gap-4 sm:columns-2 xl:columns-4">
+              {visiblePresets.map((preset, index) => (
+                <button
+                  type="button"
+                  key={preset.id}
+                  data-testid="gallery-card"
+                  className="group mb-4 block w-full break-inside-avoid overflow-hidden rounded-3xl border border-white/10 bg-white/[0.02] text-left transition hover:translate-y-[-2px] hover:border-white/25"
+                  onClick={() => {
+                    setActivePreset(preset);
+                  }}
+                >
+                  <img
+                    src={preset.image_url}
+                    alt={preset.title}
+                    className={`w-full object-cover transition duration-500 group-hover:scale-[1.03] ${galleryImageHeights[index % galleryImageHeights.length]}`}
+                  />
+                  <div className="p-3">
+                    <p className="font-display text-base text-zinc-100">{preset.title}</p>
+                    <p className="mt-1 text-xs text-zinc-500">{preset.description}</p>
+                    <p className="mt-2 inline-flex rounded-full bg-white/10 px-2 py-1 text-[10px] uppercase tracking-[0.12em] text-zinc-300">
+                      {preset.category}
+                    </p>
+                  </div>
+                </button>
+              ))}
             </div>
             {visiblePresetCount < filteredPresets.length ? (
               <div className="mt-2 flex justify-center">
@@ -468,7 +553,7 @@ export default function PromptCopilotApp() {
 
               <div className="grid gap-3">
                 <label className="space-y-1">
-                  <span className="text-xs uppercase tracking-[0.16em] text-zinc-400">Scene Goal</span>
+                  <span className="text-xs uppercase tracking-[0.16em] text-zinc-400">Цель сцены</span>
                   <input
                     data-testid="scene-goal-input"
                     className="w-full rounded-xl border border-white/15 bg-[#101116] px-3 py-2 text-sm"
@@ -477,7 +562,7 @@ export default function PromptCopilotApp() {
                   />
                 </label>
                 <label className="space-y-1">
-                  <span className="text-xs uppercase tracking-[0.16em] text-zinc-400">Scene Action</span>
+                  <span className="text-xs uppercase tracking-[0.16em] text-zinc-400">Действие сцены</span>
                   <input
                     data-testid="scene-action-input"
                     className="w-full rounded-xl border border-white/15 bg-[#101116] px-3 py-2 text-sm"
@@ -486,7 +571,7 @@ export default function PromptCopilotApp() {
                   />
                 </label>
                 <label className="space-y-1">
-                  <span className="text-xs uppercase tracking-[0.16em] text-zinc-400">Scene Environment</span>
+                  <span className="text-xs uppercase tracking-[0.16em] text-zinc-400">Окружение сцены</span>
                   <input
                     data-testid="scene-environment-input"
                     className="w-full rounded-xl border border-white/15 bg-[#101116] px-3 py-2 text-sm"
@@ -497,7 +582,7 @@ export default function PromptCopilotApp() {
               </div>
 
               <div className="mt-5 grid gap-3 md:grid-cols-2">
-                <StudioControlCard title="Camera" value={studioSetup.core6.camera_format}>
+                <StudioControlCard title="Камера" value={studioSetup.core6.camera_format}>
                   <select
                     className="w-full rounded-lg border border-white/15 bg-[#101116] px-2 py-2 text-sm"
                     value={studioSetup.core6.camera_format}
@@ -511,7 +596,7 @@ export default function PromptCopilotApp() {
                   </select>
                 </StudioControlCard>
 
-                <StudioControlCard title="Lens" value={studioSetup.core6.lens_type}>
+                <StudioControlCard title="Объектив" value={studioSetup.core6.lens_type}>
                   <select
                     className="w-full rounded-lg border border-white/15 bg-[#101116] px-2 py-2 text-sm"
                     value={studioSetup.core6.lens_type}
@@ -525,19 +610,35 @@ export default function PromptCopilotApp() {
                   </select>
                 </StudioControlCard>
 
-                <StudioControlCard title="Focal Length" value={`${studioSetup.core6.focal_length_mm} mm`}>
+                <StudioControlCard title="Фокусное расстояние" value={`${studioSetup.core6.focal_length_mm} мм`}>
                   <input
                     type="range"
                     min={14}
-                    max={135}
+                    max={200}
                     step={1}
                     value={studioSetup.core6.focal_length_mm}
                     onChange={(event) => updateCore6("focal_length_mm", Number(event.target.value))}
                     className="w-full"
                   />
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {FOCAL_LENGTH_PRESETS.map((value) => (
+                      <button
+                        key={value}
+                        type="button"
+                        className={`rounded-full border px-2 py-1 text-xs transition ${
+                          studioSetup.core6.focal_length_mm === value
+                            ? "border-white/40 bg-white text-zinc-950"
+                            : "border-white/15 bg-white/[0.04] text-zinc-300 hover:bg-white/[0.1]"
+                        }`}
+                        onClick={() => setFocalLengthPreset(value)}
+                      >
+                        {value} мм
+                      </button>
+                    ))}
+                  </div>
                 </StudioControlCard>
 
-                <StudioControlCard title="Aperture" value={studioSetup.core6.aperture}>
+                <StudioControlCard title="Диафрагма" value={studioSetup.core6.aperture}>
                   <select
                     className="w-full rounded-lg border border-white/15 bg-[#101116] px-2 py-2 text-sm"
                     value={studioSetup.core6.aperture}
@@ -551,7 +652,7 @@ export default function PromptCopilotApp() {
                   </select>
                 </StudioControlCard>
 
-                <StudioControlCard title="Lighting" value={studioSetup.core6.lighting_style}>
+                <StudioControlCard title="Свет" value={studioSetup.core6.lighting_style}>
                   <select
                     className="w-full rounded-lg border border-white/15 bg-[#101116] px-2 py-2 text-sm"
                     value={studioSetup.core6.lighting_style}
@@ -565,7 +666,7 @@ export default function PromptCopilotApp() {
                   </select>
                 </StudioControlCard>
 
-                <StudioControlCard title="Movement" value={studioSetup.core6.camera_movement}>
+                <StudioControlCard title="Движение камеры" value={studioSetup.core6.camera_movement}>
                   <select
                     className="w-full rounded-lg border border-white/15 bg-[#101116] px-2 py-2 text-sm"
                     value={studioSetup.core6.camera_movement}
@@ -581,10 +682,10 @@ export default function PromptCopilotApp() {
               </div>
 
               <details className="mt-5 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                <summary className="cursor-pointer text-sm font-semibold text-zinc-200">Locked Core (Advanced)</summary>
+                <summary className="cursor-pointer text-sm font-semibold text-zinc-200">Locked Core (Расширенный блок)</summary>
                 <div className="mt-4 grid gap-3">
                   <label className="space-y-1">
-                    <span className="text-xs uppercase tracking-[0.16em] text-zinc-400">Character Lock</span>
+                    <span className="text-xs uppercase tracking-[0.16em] text-zinc-400">Фиксация персонажа</span>
                     <textarea
                       className="h-16 w-full rounded-xl border border-white/15 bg-[#101116] px-3 py-2 text-sm"
                       value={studioSetup.locked_core.character_lock}
@@ -597,7 +698,7 @@ export default function PromptCopilotApp() {
                     />
                   </label>
                   <label className="space-y-1">
-                    <span className="text-xs uppercase tracking-[0.16em] text-zinc-400">Style Lock</span>
+                    <span className="text-xs uppercase tracking-[0.16em] text-zinc-400">Фиксация стиля</span>
                     <textarea
                       className="h-16 w-full rounded-xl border border-white/15 bg-[#101116] px-3 py-2 text-sm"
                       value={studioSetup.locked_core.style_lock}
@@ -610,7 +711,7 @@ export default function PromptCopilotApp() {
                     />
                   </label>
                   <label className="space-y-1">
-                    <span className="text-xs uppercase tracking-[0.16em] text-zinc-400">Composition Lock</span>
+                    <span className="text-xs uppercase tracking-[0.16em] text-zinc-400">Фиксация композиции</span>
                     <textarea
                       className="h-16 w-full rounded-xl border border-white/15 bg-[#101116] px-3 py-2 text-sm"
                       value={studioSetup.locked_core.composition_lock}
@@ -623,7 +724,7 @@ export default function PromptCopilotApp() {
                     />
                   </label>
                   <label className="space-y-1">
-                    <span className="text-xs uppercase tracking-[0.16em] text-zinc-400">Negative Lock</span>
+                    <span className="text-xs uppercase tracking-[0.16em] text-zinc-400">Негативные ограничения</span>
                     <textarea
                       className="h-16 w-full rounded-xl border border-white/15 bg-[#101116] px-3 py-2 text-sm"
                       value={studioSetup.locked_core.negative_lock}
@@ -642,7 +743,7 @@ export default function PromptCopilotApp() {
             <div className="space-y-4">
               <aside className="rounded-3xl border border-white/10 bg-[#07080a]/95 p-4 backdrop-blur-md md:p-6">
                 <div className="flex items-center justify-between">
-                  <h3 className="font-display text-xl font-semibold tracking-tight">Live Prompt Preview</h3>
+                  <h3 className="font-display text-xl font-semibold tracking-tight">Предпросмотр промпта</h3>
                   <span className="rounded-full border border-white/15 bg-[#101116] px-3 py-1 text-xs text-zinc-300">Nano Banana Pro</span>
                 </div>
 
@@ -688,7 +789,7 @@ export default function PromptCopilotApp() {
                             className="rounded-full bg-white/10 px-3 py-1 text-xs text-zinc-200 hover:bg-white/20"
                             onClick={() => void handleCopyText(variantPrompt(variant))}
                           >
-                            Copy
+                            Копировать
                           </button>
                         </div>
                         <pre className="mt-2 max-h-36 overflow-auto rounded-xl border border-white/10 bg-[#0b0c10] p-2 text-[11px] whitespace-pre-wrap text-zinc-300">
@@ -905,9 +1006,9 @@ export default function PromptCopilotApp() {
         </div>
       ) : null}
 
-      {copyToast ? (
-        <div className="pointer-events-none fixed bottom-6 right-6 z-30 rounded-xl border border-white/15 bg-[#111217]/95 px-4 py-2 text-sm text-zinc-100 shadow-[0_12px_30px_rgba(0,0,0,0.45)]">
-          <span className={copyToast.kind === "error" ? "text-rose-300" : "text-emerald-300"}>{copyToast.text}</span>
+      {toast ? (
+        <div className="pointer-events-none fixed bottom-6 right-6 z-30 rounded-xl border border-white/15 bg-[#111217]/95 px-4 py-2 text-sm text-zinc-100 shadow-[0_12px_30px_rgba(0,0,0,0.45)] animate-toast-fade">
+          <span className={toast.kind === "error" ? "text-rose-300" : "text-emerald-300"}>{toast.text}</span>
         </div>
       ) : null}
     </div>
