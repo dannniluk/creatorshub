@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 :root {
-  --font-sans: var(--font-manrope), "Trebuchet MS", "Helvetica Neue", sans-serif;
-  --font-display: var(--font-montserrat), var(--font-manrope), sans-serif;
+  --font-sans: "Avenir Next", "Trebuchet MS", "Helvetica Neue", sans-serif;
+  --font-display: "Avenir Next Demi Bold", "Avenir Next", "Futura", "Trebuchet MS", sans-serif;
   --font-mono: "IBM Plex Mono", "SFMono-Regular", Menlo, Monaco, monospace;
   --bg-main: #050505;
   --bg-panel: #111215;

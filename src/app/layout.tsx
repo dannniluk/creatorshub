@@ -1,17 +1,6 @@
 import type { Metadata } from "next";
-import { Manrope, Montserrat } from "next/font/google";
 
 import "./globals.css";
-
-const manrope = Manrope({
-  subsets: ["latin", "cyrillic"],
-  variable: "--font-manrope",
-});
-
-const montserrat = Montserrat({
-  subsets: ["latin", "cyrillic"],
-  variable: "--font-montserrat",
-});
 
 export const metadata: Metadata = {
   title: "Prompt Copilot MVP",
@@ -25,7 +14,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ru">
-      <body className={`${manrope.variable} ${montserrat.variable} antialiased`}>{children}</body>
+      <body className="antialiased">{children}</body>
     </html>
   );
 }
