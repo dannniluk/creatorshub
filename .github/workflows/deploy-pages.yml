@@ -23,11 +23,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
+      - name: Check Node.js runtime
+        run: node -v
 
       - name: Enable Corepack and pnpm
         run: |
