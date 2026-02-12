@@ -142,8 +142,8 @@ function StudioControlCard({
   children: ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-      <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-400">{title}</p>
+    <div className="rounded-2xl border border-white/10 bg-[#101116] p-4">
+      <p className="font-display text-[11px] uppercase tracking-[0.2em] text-zinc-500">{title}</p>
       <p className="mt-2 text-lg font-medium text-zinc-100">{value}</p>
       <div className="mt-3">{children}</div>
     </div>
@@ -322,20 +322,46 @@ export default function PromptCopilotApp() {
   };
 
   const tabClass = (tab: TabKey): string =>
-    `rounded-full px-4 py-2 text-sm transition ${
-      activeTab === tab ? "bg-white text-zinc-950" : "bg-white/10 text-zinc-300 hover:bg-white/20"
+    `rounded-full px-5 py-2 text-[15px] font-medium transition ${
+      activeTab === tab
+        ? "bg-white text-[#0f0f12] shadow-[0_8px_30px_rgba(255,255,255,0.12)]"
+        : "bg-white/[0.06] text-zinc-300 hover:bg-white/[0.12]"
     }`;
 
+  const galleryImageHeights = ["h-44", "h-72", "h-56", "h-80", "h-52", "h-64"] as const;
+
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_18%_22%,rgba(76,96,122,0.35),transparent_35%),radial-gradient(circle_at_80%_15%,rgba(78,57,102,0.30),transparent_38%),#050507] text-zinc-100">
-      <div className="mx-auto max-w-[1440px] px-4 pb-10 pt-6 md:px-8">
-        <header className="rounded-3xl border border-white/10 bg-black/35 p-5 backdrop-blur-md">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <p className="text-xs uppercase tracking-[0.32em] text-zinc-400">Cinema Studio</p>
-              <h1 className="mt-1 text-3xl font-semibold tracking-tight">Prompt Copilot</h1>
+    <div className="min-h-screen bg-[#040405] text-zinc-100">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_2%,rgba(255,255,255,0.1),transparent_18%),radial-gradient(circle_at_82%_14%,rgba(255,255,255,0.06),transparent_20%)]" />
+      <div className="relative mx-auto max-w-[1720px] px-4 pb-10 pt-6 md:px-8 lg:px-12">
+        <header className="rounded-[30px] border border-white/10 bg-[#08090b]/90 px-5 py-4 shadow-[0_18px_80px_rgba(0,0,0,0.45)] backdrop-blur-xl md:px-7">
+          <div className="grid items-center gap-4 lg:grid-cols-[1.1fr_1.2fr_1fr]">
+            <div className="space-y-3">
+              <div className="flex items-center gap-3">
+                <span className="grid h-7 w-7 grid-cols-2 gap-[3px] rounded-full p-1">
+                  {Array.from({ length: 4 }).map((_, index) => (
+                    <span key={`dot-${index}`} className="h-[6px] w-[6px] rounded-full bg-white/90" />
+                  ))}
+                </span>
+                <p className="font-display text-[11px] uppercase tracking-[0.34em] text-zinc-500">Cinema Studio</p>
+              </div>
+              <h1 className="font-display text-4xl font-semibold tracking-tight text-zinc-100 md:text-[44px]">Prompt Copilot</h1>
             </div>
-            <nav className="flex flex-wrap gap-2">
+
+            <div className="rounded-full border border-white/10 bg-white/[0.06] px-5 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]">
+              <div className="flex items-center gap-3 text-zinc-400">
+                <span className="text-base leading-none">✦</span>
+                <input
+                  className="w-full bg-transparent text-[15px] text-zinc-200 outline-none placeholder:text-zinc-500"
+                  placeholder="Try ‘summer days in the mediterranean’"
+                  value={galleryQuery}
+                  onChange={(event) => setGalleryQuery(event.target.value)}
+                />
+                <span className="rounded-full bg-white/[0.06] px-2 py-1 text-xs text-zinc-400">⌘K</span>
+              </div>
+            </div>
+
+            <nav className="flex flex-wrap items-center justify-end gap-2">
               <button data-testid="tab-gallery" className={tabClass("gallery")} onClick={() => setActiveTab("gallery")}>
                 Галерея
               </button>
@@ -348,62 +374,70 @@ export default function PromptCopilotApp() {
               <button className={tabClass("reference")} onClick={() => setActiveTab("reference")}>
                 Справочник
               </button>
+              <button className="ml-2 rounded-full bg-white px-6 py-2 text-[15px] font-semibold text-[#111214] shadow-[0_8px_30px_rgba(255,255,255,0.18)]">
+                Create
+              </button>
             </nav>
           </div>
-          {message ? <p className="mt-4 text-sm text-emerald-300">{message}</p> : null}
-          {error ? <p className="mt-4 text-sm text-rose-300">{error}</p> : null}
+          {message ? <p className="mt-3 text-sm text-emerald-300">{message}</p> : null}
+          {error ? <p className="mt-3 text-sm text-rose-300">{error}</p> : null}
         </header>
 
         {activeTab === "gallery" ? (
-          <section className="mt-4 rounded-3xl border border-white/10 bg-black/30 p-4 backdrop-blur-md md:p-6">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <section className="mt-4 rounded-[30px] border border-white/10 bg-[#07080a]/95 p-4 shadow-[0_18px_70px_rgba(0,0,0,0.4)] md:p-6">
+            <div className="mb-5 flex items-end justify-between gap-3">
               <div>
-                <h2 className="text-2xl font-semibold">Галерея референсов</h2>
-                <p className="mt-1 text-sm text-zinc-400">Кликаешь карточку, изучаешь готовый промпт и применяешь стиль в Студию.</p>
+                <h2 className="font-display text-3xl font-semibold tracking-tight">For You</h2>
+                <p className="mt-1 text-sm text-zinc-500">Подбери референс, открой готовый промпт и перенеси стиль в Студию.</p>
               </div>
-              <input
-                className="w-full rounded-full border border-white/15 bg-black/40 px-4 py-2 text-sm text-zinc-100 outline-none md:w-80"
-                placeholder="Поиск по mood, shot, тегам"
-                value={galleryQuery}
-                onChange={(event) => setGalleryQuery(event.target.value)}
-              />
+              <div className="hidden rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-xs text-zinc-400 md:block">
+                {filteredPresets.length} presets
+              </div>
             </div>
 
-            <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {filteredPresets.map((preset) => (
-                <button
-                  type="button"
-                  key={preset.id}
-                  data-testid="gallery-card"
-                  className="group overflow-hidden rounded-2xl border border-white/10 bg-white/[0.02] text-left transition hover:-translate-y-0.5 hover:border-white/25"
-                  onClick={() => {
-                    setModalProvider("kling");
-                    setActivePreset(preset);
-                  }}
-                >
-                  <img src={preset.image_url} alt={preset.title} className="h-56 w-full object-cover" />
-                  <div className="space-y-2 p-3">
-                    <p className="text-sm font-semibold text-zinc-50">{preset.title}</p>
-                    <p className="text-xs text-zinc-400">{preset.description}</p>
-                    <div className="flex flex-wrap gap-1">
-                      {preset.tags.slice(0, 3).map((tag) => (
-                        <span key={tag} className="rounded-full bg-white/10 px-2 py-1 text-[10px] uppercase tracking-[0.08em] text-zinc-300">
-                          {tag}
-                        </span>
-                      ))}
+            <div className="grid gap-4 xl:grid-cols-[310px_1fr]">
+              <aside className="hidden rounded-3xl border border-white/10 bg-white/[0.04] p-5 xl:block">
+                <h3 className="font-display text-2xl">Connect styles</h3>
+                <p className="mt-2 text-sm text-zinc-500">Собирай референсы, чтобы улучшить выдачу в Studio.</p>
+                <div className="mt-6 rounded-2xl bg-white/[0.04] p-3">
+                  <div className="h-3 rounded-full bg-white/[0.05]" />
+                  <div className="mt-3 inline-flex rounded-full bg-[#1c1d22] px-3 py-1 text-xs text-zinc-300">0/12 collected</div>
+                </div>
+              </aside>
+
+              <div className="columns-1 gap-4 sm:columns-2 xl:columns-4">
+                {filteredPresets.map((preset, index) => (
+                  <button
+                    type="button"
+                    key={preset.id}
+                    data-testid="gallery-card"
+                    className="group mb-4 block w-full break-inside-avoid overflow-hidden rounded-3xl border border-white/10 bg-white/[0.02] text-left transition hover:translate-y-[-2px] hover:border-white/25"
+                    onClick={() => {
+                      setModalProvider("kling");
+                      setActivePreset(preset);
+                    }}
+                  >
+                    <img
+                      src={preset.image_url}
+                      alt={preset.title}
+                      className={`w-full object-cover transition duration-500 group-hover:scale-[1.03] ${galleryImageHeights[index % galleryImageHeights.length]}`}
+                    />
+                    <div className="p-3">
+                      <p className="font-display text-base text-zinc-100">{preset.title}</p>
+                      <p className="mt-1 text-xs text-zinc-500">{preset.description}</p>
                     </div>
-                  </div>
-                </button>
-              ))}
+                  </button>
+                ))}
+              </div>
             </div>
           </section>
         ) : null}
 
         {activeTab === "studio" ? (
           <section className="mt-4 grid gap-4 xl:grid-cols-[1.15fr_1fr]">
-            <div className="rounded-3xl border border-white/10 bg-black/30 p-4 backdrop-blur-md md:p-6">
+            <div className="rounded-3xl border border-white/10 bg-[#07080a]/95 p-4 backdrop-blur-md md:p-6">
               <div className="mb-4">
-                <h2 className="text-2xl font-semibold">Студия</h2>
+                <h2 className="font-display text-3xl font-semibold tracking-tight">Студия</h2>
                 <p className="mt-1 text-sm text-zinc-400">Собери сетап и получи 6 вариаций промпта под Kling и Nano Banana Pro.</p>
               </div>
 
@@ -412,7 +446,7 @@ export default function PromptCopilotApp() {
                   <span className="text-xs uppercase tracking-[0.16em] text-zinc-400">Scene Goal</span>
                   <input
                     data-testid="scene-goal-input"
-                    className="w-full rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-sm"
+                    className="w-full rounded-xl border border-white/15 bg-[#101116] px-3 py-2 text-sm"
                     value={studioSetup.scene_goal}
                     onChange={(event) => setStudioSetup((current) => ({ ...current, scene_goal: event.target.value }))}
                   />
@@ -421,7 +455,7 @@ export default function PromptCopilotApp() {
                   <span className="text-xs uppercase tracking-[0.16em] text-zinc-400">Scene Action</span>
                   <input
                     data-testid="scene-action-input"
-                    className="w-full rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-sm"
+                    className="w-full rounded-xl border border-white/15 bg-[#101116] px-3 py-2 text-sm"
                     value={studioSetup.scene_action}
                     onChange={(event) => setStudioSetup((current) => ({ ...current, scene_action: event.target.value }))}
                   />
@@ -430,7 +464,7 @@ export default function PromptCopilotApp() {
                   <span className="text-xs uppercase tracking-[0.16em] text-zinc-400">Scene Environment</span>
                   <input
                     data-testid="scene-environment-input"
-                    className="w-full rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-sm"
+                    className="w-full rounded-xl border border-white/15 bg-[#101116] px-3 py-2 text-sm"
                     value={studioSetup.scene_environment}
                     onChange={(event) => setStudioSetup((current) => ({ ...current, scene_environment: event.target.value }))}
                   />
@@ -440,7 +474,7 @@ export default function PromptCopilotApp() {
               <div className="mt-5 grid gap-3 md:grid-cols-2">
                 <StudioControlCard title="Camera" value={studioSetup.core6.camera_format}>
                   <select
-                    className="w-full rounded-lg border border-white/15 bg-black/40 px-2 py-2 text-sm"
+                    className="w-full rounded-lg border border-white/15 bg-[#101116] px-2 py-2 text-sm"
                     value={studioSetup.core6.camera_format}
                     onChange={(event) => updateCore6("camera_format", event.target.value)}
                   >
@@ -454,7 +488,7 @@ export default function PromptCopilotApp() {
 
                 <StudioControlCard title="Lens" value={studioSetup.core6.lens_type}>
                   <select
-                    className="w-full rounded-lg border border-white/15 bg-black/40 px-2 py-2 text-sm"
+                    className="w-full rounded-lg border border-white/15 bg-[#101116] px-2 py-2 text-sm"
                     value={studioSetup.core6.lens_type}
                     onChange={(event) => updateCore6("lens_type", event.target.value)}
                   >
@@ -480,7 +514,7 @@ export default function PromptCopilotApp() {
 
                 <StudioControlCard title="Aperture" value={studioSetup.core6.aperture}>
                   <select
-                    className="w-full rounded-lg border border-white/15 bg-black/40 px-2 py-2 text-sm"
+                    className="w-full rounded-lg border border-white/15 bg-[#101116] px-2 py-2 text-sm"
                     value={studioSetup.core6.aperture}
                     onChange={(event) => updateCore6("aperture", event.target.value)}
                   >
@@ -494,7 +528,7 @@ export default function PromptCopilotApp() {
 
                 <StudioControlCard title="Lighting" value={studioSetup.core6.lighting_style}>
                   <select
-                    className="w-full rounded-lg border border-white/15 bg-black/40 px-2 py-2 text-sm"
+                    className="w-full rounded-lg border border-white/15 bg-[#101116] px-2 py-2 text-sm"
                     value={studioSetup.core6.lighting_style}
                     onChange={(event) => updateCore6("lighting_style", event.target.value)}
                   >
@@ -508,7 +542,7 @@ export default function PromptCopilotApp() {
 
                 <StudioControlCard title="Movement" value={studioSetup.core6.camera_movement}>
                   <select
-                    className="w-full rounded-lg border border-white/15 bg-black/40 px-2 py-2 text-sm"
+                    className="w-full rounded-lg border border-white/15 bg-[#101116] px-2 py-2 text-sm"
                     value={studioSetup.core6.camera_movement}
                     onChange={(event) => updateCore6("camera_movement", event.target.value)}
                   >
@@ -527,7 +561,7 @@ export default function PromptCopilotApp() {
                   <label className="space-y-1">
                     <span className="text-xs uppercase tracking-[0.16em] text-zinc-400">Character Lock</span>
                     <textarea
-                      className="h-16 w-full rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-sm"
+                      className="h-16 w-full rounded-xl border border-white/15 bg-[#101116] px-3 py-2 text-sm"
                       value={studioSetup.locked_core.character_lock}
                       onChange={(event) =>
                         setStudioSetup((current) => ({
@@ -540,7 +574,7 @@ export default function PromptCopilotApp() {
                   <label className="space-y-1">
                     <span className="text-xs uppercase tracking-[0.16em] text-zinc-400">Style Lock</span>
                     <textarea
-                      className="h-16 w-full rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-sm"
+                      className="h-16 w-full rounded-xl border border-white/15 bg-[#101116] px-3 py-2 text-sm"
                       value={studioSetup.locked_core.style_lock}
                       onChange={(event) =>
                         setStudioSetup((current) => ({
@@ -553,7 +587,7 @@ export default function PromptCopilotApp() {
                   <label className="space-y-1">
                     <span className="text-xs uppercase tracking-[0.16em] text-zinc-400">Composition Lock</span>
                     <textarea
-                      className="h-16 w-full rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-sm"
+                      className="h-16 w-full rounded-xl border border-white/15 bg-[#101116] px-3 py-2 text-sm"
                       value={studioSetup.locked_core.composition_lock}
                       onChange={(event) =>
                         setStudioSetup((current) => ({
@@ -566,7 +600,7 @@ export default function PromptCopilotApp() {
                   <label className="space-y-1">
                     <span className="text-xs uppercase tracking-[0.16em] text-zinc-400">Negative Lock</span>
                     <textarea
-                      className="h-16 w-full rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-sm"
+                      className="h-16 w-full rounded-xl border border-white/15 bg-[#101116] px-3 py-2 text-sm"
                       value={studioSetup.locked_core.negative_lock}
                       onChange={(event) =>
                         setStudioSetup((current) => ({
@@ -581,10 +615,10 @@ export default function PromptCopilotApp() {
             </div>
 
             <div className="space-y-4">
-              <aside className="rounded-3xl border border-white/10 bg-black/30 p-4 backdrop-blur-md md:p-6">
+              <aside className="rounded-3xl border border-white/10 bg-[#07080a]/95 p-4 backdrop-blur-md md:p-6">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-semibold">Live Prompt Preview</h3>
-                  <div className="flex gap-2 rounded-full border border-white/15 bg-black/40 p-1">
+                  <h3 className="font-display text-xl font-semibold tracking-tight">Live Prompt Preview</h3>
+                  <div className="flex gap-2 rounded-full border border-white/15 bg-[#101116] p-1">
                     <button
                       className={`rounded-full px-3 py-1 text-xs ${selectedProvider === "kling" ? "bg-white text-zinc-950" : "text-zinc-300"}`}
                       onClick={() => setSelectedProvider("kling")}
@@ -600,7 +634,7 @@ export default function PromptCopilotApp() {
                   </div>
                 </div>
 
-                <pre className="mt-3 max-h-[360px] overflow-auto rounded-2xl border border-white/10 bg-black/45 p-3 text-xs leading-relaxed text-zinc-200 whitespace-pre-wrap">
+                <pre className="mt-3 max-h-[360px] overflow-auto rounded-2xl border border-white/10 bg-[#0d0e12] p-3 text-xs leading-relaxed text-zinc-200 whitespace-pre-wrap">
                   {variantPrompt(livePreview.variants[0]!, selectedProvider)}
                 </pre>
 
@@ -624,15 +658,15 @@ export default function PromptCopilotApp() {
                 </button>
               </aside>
 
-              <section className="rounded-3xl border border-white/10 bg-black/30 p-4 backdrop-blur-md md:p-6">
+              <section className="rounded-3xl border border-white/10 bg-[#07080a]/95 p-4 backdrop-blur-md md:p-6">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-semibold">Последний собранный пакет</h3>
+                  <h3 className="font-display text-xl font-semibold tracking-tight">Последний собранный пакет</h3>
                   {generatedPack ? <p className="text-xs text-zinc-400">{formatDate(generatedPack.created_at)}</p> : null}
                 </div>
                 {generatedPack ? (
                   <div className="mt-3 grid gap-3">
                     {generatedPack.variants.map((variant) => (
-                      <article key={variant.id} data-testid="pack-variant-card" className="rounded-2xl border border-white/10 bg-black/45 p-3">
+                      <article key={variant.id} data-testid="pack-variant-card" className="rounded-2xl border border-white/10 bg-[#0d0e12] p-3">
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <div>
                             <p className="text-sm font-semibold">{variant.label}</p>
@@ -645,7 +679,7 @@ export default function PromptCopilotApp() {
                             Copy
                           </button>
                         </div>
-                        <pre className="mt-2 max-h-36 overflow-auto rounded-xl border border-white/10 bg-black/55 p-2 text-[11px] whitespace-pre-wrap text-zinc-300">
+                        <pre className="mt-2 max-h-36 overflow-auto rounded-xl border border-white/10 bg-[#0b0c10] p-2 text-[11px] whitespace-pre-wrap text-zinc-300">
                           {variantPrompt(variant, selectedProvider)}
                         </pre>
                       </article>
@@ -661,8 +695,8 @@ export default function PromptCopilotApp() {
 
         {activeTab === "packs" ? (
           <section className="mt-4 grid gap-4 xl:grid-cols-[1.1fr_1fr]">
-            <div className="rounded-3xl border border-white/10 bg-black/30 p-4 backdrop-blur-md md:p-6">
-              <h2 className="text-2xl font-semibold">Пакеты</h2>
+            <div className="rounded-3xl border border-white/10 bg-[#07080a]/95 p-4 backdrop-blur-md md:p-6">
+              <h2 className="font-display text-3xl font-semibold tracking-tight">Пакеты</h2>
               <p className="mt-1 text-sm text-zinc-400">История собранных Prompt Pack, экспорт и быстрый возврат в Студию.</p>
               <div className="mt-4 space-y-3">
                 {packs.map((pack) => (
@@ -670,7 +704,7 @@ export default function PromptCopilotApp() {
                     key={pack.id}
                     data-testid="pack-history-item"
                     className={`rounded-2xl border p-3 transition ${
-                      activePackId === pack.id ? "border-white/35 bg-white/[0.08]" : "border-white/10 bg-black/40"
+                      activePackId === pack.id ? "border-white/35 bg-white/[0.08]" : "border-white/10 bg-[#101116]"
                     }`}
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -712,10 +746,10 @@ export default function PromptCopilotApp() {
               </div>
             </div>
 
-            <div className="rounded-3xl border border-white/10 bg-black/30 p-4 backdrop-blur-md md:p-6">
+            <div className="rounded-3xl border border-white/10 bg-[#07080a]/95 p-4 backdrop-blur-md md:p-6">
               <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold">Просмотр пакета</h3>
-                <div className="flex gap-2 rounded-full border border-white/15 bg-black/40 p-1">
+                <h3 className="font-display text-xl font-semibold tracking-tight">Просмотр пакета</h3>
+                <div className="flex gap-2 rounded-full border border-white/15 bg-[#101116] p-1">
                   <button
                     className={`rounded-full px-3 py-1 text-xs ${activePackProvider === "kling" ? "bg-white text-zinc-950" : "text-zinc-300"}`}
                     onClick={() => setActivePackProvider("kling")}
@@ -734,7 +768,7 @@ export default function PromptCopilotApp() {
               {activePack ? (
                 <div className="mt-3 space-y-3">
                   {activePack.variants.map((variant) => (
-                    <article key={variant.id} className="rounded-2xl border border-white/10 bg-black/45 p-3">
+                    <article key={variant.id} className="rounded-2xl border border-white/10 bg-[#0d0e12] p-3">
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-sm font-semibold">{variant.label}</p>
                         <button
@@ -744,7 +778,7 @@ export default function PromptCopilotApp() {
                           Copy
                         </button>
                       </div>
-                      <pre className="mt-2 max-h-40 overflow-auto rounded-xl border border-white/10 bg-black/55 p-2 text-[11px] whitespace-pre-wrap text-zinc-300">
+                      <pre className="mt-2 max-h-40 overflow-auto rounded-xl border border-white/10 bg-[#0b0c10] p-2 text-[11px] whitespace-pre-wrap text-zinc-300">
                         {variantPrompt(variant, activePackProvider)}
                       </pre>
                     </article>
@@ -758,8 +792,8 @@ export default function PromptCopilotApp() {
         ) : null}
 
         {activeTab === "reference" ? (
-          <section className="mt-4 rounded-3xl border border-white/10 bg-black/30 p-4 backdrop-blur-md md:p-6">
-            <h2 className="text-2xl font-semibold">Справочник</h2>
+          <section className="mt-4 rounded-3xl border border-white/10 bg-[#07080a]/95 p-4 backdrop-blur-md md:p-6">
+            <h2 className="font-display text-3xl font-semibold tracking-tight">Справочник</h2>
             <p className="mt-1 text-sm text-zinc-400">Быстрые карточки по Core 6: что это, как влияет и когда использовать.</p>
 
             <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -807,7 +841,7 @@ export default function PromptCopilotApp() {
                   phrase: "camera movement: slow push-in",
                 },
               ].map((item) => (
-                <article key={item.title} className="rounded-2xl border border-white/10 bg-black/45 p-4">
+                <article key={item.title} className="rounded-2xl border border-white/10 bg-[#0d0e12] p-4">
                   <p className="text-sm font-semibold text-zinc-100">{item.title}</p>
                   <p className="mt-2 text-xs text-zinc-400">Что это: {item.what}</p>
                   <p className="mt-1 text-xs text-zinc-400">Влияние: {item.impact}</p>
@@ -821,12 +855,12 @@ export default function PromptCopilotApp() {
       </div>
 
       {activePreset ? (
-        <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/70 px-4 py-6" data-testid="gallery-modal">
-          <div className="max-h-full w-full max-w-4xl overflow-auto rounded-3xl border border-white/15 bg-[#0b0d12] p-4 md:p-6">
+        <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/80 px-4 py-6" data-testid="gallery-modal">
+          <div className="max-h-full w-full max-w-5xl overflow-auto rounded-[30px] border border-white/15 bg-[#07080a] p-4 shadow-[0_30px_120px_rgba(0,0,0,0.65)] md:p-6">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-xs uppercase tracking-[0.2em] text-zinc-400">Gallery Reference</p>
-                <h3 className="mt-1 text-2xl font-semibold">{activePreset.title}</h3>
+                <p className="font-display text-xs uppercase tracking-[0.22em] text-zinc-500">Gallery Reference</p>
+                <h3 className="font-display mt-1 text-3xl font-semibold tracking-tight">{activePreset.title}</h3>
                 <p className="mt-1 text-sm text-zinc-400">{activePreset.description}</p>
               </div>
               <button
@@ -838,9 +872,13 @@ export default function PromptCopilotApp() {
             </div>
 
             <div className="mt-4 grid gap-4 md:grid-cols-[1fr_1fr]">
-              <img src={activePreset.image_url} alt={activePreset.title} className="h-full min-h-72 w-full rounded-2xl object-cover" />
+              <img
+                src={activePreset.image_url}
+                alt={activePreset.title}
+                className="h-full min-h-72 w-full rounded-3xl border border-white/10 object-cover"
+              />
               <div>
-                <div className="flex gap-2 rounded-full border border-white/15 bg-black/40 p-1">
+                <div className="flex gap-2 rounded-full border border-white/15 bg-[#101116] p-1">
                   <button
                     className={`rounded-full px-3 py-1 text-xs ${modalProvider === "kling" ? "bg-white text-zinc-950" : "text-zinc-300"}`}
                     onClick={() => setModalProvider("kling")}
@@ -855,7 +893,7 @@ export default function PromptCopilotApp() {
                   </button>
                 </div>
 
-                <pre className="mt-3 max-h-64 overflow-auto rounded-2xl border border-white/10 bg-black/45 p-3 text-xs leading-relaxed whitespace-pre-wrap text-zinc-200">
+                <pre className="mt-3 max-h-64 overflow-auto rounded-2xl border border-white/10 bg-[#0d0e12] p-3 text-xs leading-relaxed whitespace-pre-wrap text-zinc-200">
                   {activePreset.example_prompts[modalProvider]}
                 </pre>
 

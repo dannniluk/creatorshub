@@ -1,8 +1,15 @@
 @import "tailwindcss";
 
 :root {
-  --font-sans: "Avenir Next", "Futura", "Trebuchet MS", "Helvetica Neue", sans-serif;
+  --font-sans: var(--font-manrope), "Trebuchet MS", "Helvetica Neue", sans-serif;
+  --font-display: var(--font-montserrat), var(--font-manrope), sans-serif;
   --font-mono: "IBM Plex Mono", "SFMono-Regular", Menlo, Monaco, monospace;
+  --bg-main: #050505;
+  --bg-panel: #111215;
+  --bg-soft: #16171b;
+  --text-main: #f0f0f1;
+  --text-muted: #8f929a;
+  --line-soft: rgba(255, 255, 255, 0.09);
 }
 
 * {
@@ -16,6 +23,8 @@ body {
 }
 
 body {
+  background: var(--bg-main);
+  color: var(--text-main);
   font-family: var(--font-sans), sans-serif;
 }
 
@@ -23,4 +32,8 @@ pre,
 code,
 .font-mono {
   font-family: var(--font-mono), monospace;
+}
+
+.font-display {
+  font-family: var(--font-display), sans-serif;
 }
