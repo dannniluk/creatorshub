@@ -23,17 +23,27 @@ function makeSetup(): StudioSetup {
 }
 
 describe("generatePromptPack", () => {
-  test("returns exactly six variants", () => {
+  test("returns base prompt plus three variants", () => {
     const pack = generatePromptPack({ setup: makeSetup() });
 
-    expect(pack.variants).toHaveLength(6);
+    expect(pack.variants).toHaveLength(4);
   });
 
-  test("builds Nano Banana Pro prompt format for every variant", () => {
+  test("builds production-safe prompt structure for every variant", () => {
     const pack = generatePromptPack({ setup: makeSetup() });
 
     for (const variant of pack.variants) {
       expect(variant.prompt_nano).toContain("Nano Banana Pro Prompt");
+      expect(variant.prompt_nano).toContain("INTENT:");
+      expect(variant.prompt_nano).toContain("SUBJECT:");
+      expect(variant.prompt_nano).toContain("COMPOSITION:");
+      expect(variant.prompt_nano).toContain("ENVIRONMENT:");
+      expect(variant.prompt_nano).toContain("CAMERA EMULATION:");
+      expect(variant.prompt_nano).toContain("LIGHTING:");
+      expect(variant.prompt_nano).toContain("LOCKS:");
+      expect(variant.prompt_nano).toContain("NEGATIVE CONSTRAINTS:");
+      expect(variant.prompt_nano).toContain("TEXT POLICY: NO-TEXT STRICT");
+      expect(variant.prompt_nano).toContain("no watermark, no text, no deformed faces/hands, no extra fingers, no artifacts");
     }
   });
 

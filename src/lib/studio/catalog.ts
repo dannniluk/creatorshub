@@ -1,40 +1,71 @@
-export type CameraCombo = {
-  lens_profile: string;
-  focal_mm: number;
+export type CreatorCategory = "Fashion" | "People" | "Food" | "Product" | "Interiors";
+
+export type GoalTag =
+  | "Texture"
+  | "Clean portrait"
+  | "Beauty gloss"
+  | "Cinematic drama"
+  | "Night mood"
+  | "Catalog";
+
+export type SlidersMapping = {
+  detail: number;
+  backgroundBlur: number;
+  lightDrama: number;
+};
+
+export type TechSettings = {
+  camera_format: string;
+  lens_type: string;
+  focal_length_mm: number;
   aperture: string;
-  light: string;
+  lighting_style: string;
+};
+
+export type StudioPreset = {
+  id: string;
+  category: CreatorCategory;
+  humanTitle: string;
+  benefit: string;
+  goalTags: GoalTag[];
+  recommended: boolean;
+  safeDefault: boolean;
+  whyThisWorks: string[];
+  slidersMapping: SlidersMapping;
+  techSettings: TechSettings;
+  sceneSubject: string;
+  sceneComposition: string;
+  sceneEnvironment: string;
 };
 
 export type StudioCatalogCamera = {
   name: string;
   character: string;
   best_for: string[];
-  best_combo: CameraCombo;
-};
-
-export type StudioTaskPreset = {
-  id: string;
-  task: string;
-  category: "Люди" | "Мода" | "Еда" | "Медицина";
-  description: string;
-  camera: string;
-  lens_profile: string;
-  focal_mm: number;
-  aperture: string;
-  light: string;
-};
-
-export type FocalLengthGuide = {
-  label: string;
-  use: string[];
+  best_combo: TechSettings;
 };
 
 export type LightSetupGuide = {
   name: string;
-  best_for: string[];
+  plainMeaning: string;
 };
 
-export const STUDIO_CATEGORIES = ["Все", "Люди", "Мода", "Еда", "Медицина"] as const;
+export const BEGINNER_CATEGORIES: readonly CreatorCategory[] = [
+  "Fashion",
+  "People",
+  "Food",
+  "Product",
+  "Interiors",
+] as const;
+
+export const BEGINNER_GOALS: readonly GoalTag[] = [
+  "Texture",
+  "Clean portrait",
+  "Beauty gloss",
+  "Cinematic drama",
+  "Night mood",
+  "Catalog",
+] as const;
 
 export const STUDIO_CAMERA_LIBRARY: StudioCatalogCamera[] = [
   {
@@ -42,10 +73,11 @@ export const STUDIO_CAMERA_LIBRARY: StudioCatalogCamera[] = [
     character: "Базовый современный full-frame: чисто, предсказуемо, универсально.",
     best_for: ["универсальная коммерция", "быстрый старт без риска", "контент на каждый день"],
     best_combo: {
-      lens_profile: "Spherical Prime",
-      focal_mm: 35,
+      camera_format: "Digital Full Frame",
+      lens_type: "Spherical Prime",
+      focal_length_mm: 35,
       aperture: "f/2.8",
-      light: "Мягкий ключ с деликатным заполнением",
+      lighting_style: "Мягкий ключ с деликатным заполнением",
     },
   },
   {
@@ -53,10 +85,11 @@ export const STUDIO_CAMERA_LIBRARY: StudioCatalogCamera[] = [
     character: "Кино-цвет, мягкий roll-off в светах, дорогой тон кожи.",
     best_for: ["портрет", "fashion-film эстетика", "премиальная реклама"],
     best_combo: {
-      lens_profile: "Master Prime",
-      focal_mm: 85,
+      camera_format: "ARRI ALEXA Mini LF",
+      lens_type: "Master Prime",
+      focal_length_mm: 85,
       aperture: "f/2.0",
-      light: "Rembrandt",
+      lighting_style: "Rembrandt",
     },
   },
   {
@@ -64,10 +97,11 @@ export const STUDIO_CAMERA_LIBRARY: StudioCatalogCamera[] = [
     character: "Высокая детализация и запас для кропа/поста; хорошо для VFX.",
     best_for: ["ночные сцены", "контрастные сцены", "дальние планы", "VFX-heavy"],
     best_combo: {
-      lens_profile: "Telephoto Prime",
-      focal_mm: 135,
+      camera_format: "RED V-RAPTOR 8K VV",
+      lens_type: "Telephoto Prime",
+      focal_length_mm: 135,
       aperture: "f/2.8",
-      light: "Blue hour ambient",
+      lighting_style: "Blue hour ambient",
     },
   },
   {
@@ -75,10 +109,11 @@ export const STUDIO_CAMERA_LIBRARY: StudioCatalogCamera[] = [
     character: "Быстрый гибрид с точным автофокусом и стабильной резкостью.",
     best_for: ["макро еды", "динамичная предметка", "коммерция в темпе"],
     best_combo: {
-      lens_profile: "Macro 100mm",
-      focal_mm: 100,
+      camera_format: "Sony A1",
+      lens_type: "Macro 100mm",
+      focal_length_mm: 100,
       aperture: "f/4",
-      light: "Softbox overhead",
+      lighting_style: "Softbox overhead",
     },
   },
   {
@@ -86,10 +121,11 @@ export const STUDIO_CAMERA_LIBRARY: StudioCatalogCamera[] = [
     character: "Мягкий skin-tone и аккуратный контраст в портретах.",
     best_for: ["портрет", "beauty", "контент для брендов одежды"],
     best_combo: {
-      lens_profile: "Spherical Prime",
-      focal_mm: 50,
+      camera_format: "Canon EOS R5",
+      lens_type: "Spherical Prime",
+      focal_length_mm: 50,
       aperture: "f/2.0",
-      light: "Beauty dish frontal",
+      lighting_style: "Beauty dish frontal",
     },
   },
   {
@@ -97,10 +133,11 @@ export const STUDIO_CAMERA_LIBRARY: StudioCatalogCamera[] = [
     character: "Плотная детализация и контроль текстур.",
     best_for: ["текстуры тканей", "предметка", "архитектурные детали"],
     best_combo: {
-      lens_profile: "Macro 100mm",
-      focal_mm: 105,
+      camera_format: "Nikon Z8",
+      lens_type: "Macro 100mm",
+      focal_length_mm: 105,
       aperture: "f/5.6",
-      light: "Split lighting",
+      lighting_style: "Split lighting",
     },
   },
   {
@@ -108,10 +145,11 @@ export const STUDIO_CAMERA_LIBRARY: StudioCatalogCamera[] = [
     character: "Medium format пластика: плавные градиенты, чистые тона, премиальный микроконтраст.",
     best_for: ["fashion/beauty", "текстуры и материалы", "премиальная предметка", "крупные планы"],
     best_combo: {
-      lens_profile: "Macro 100mm",
-      focal_mm: 105,
+      camera_format: "Fujifilm GFX100 II",
+      lens_type: "Macro 100mm",
+      focal_length_mm: 105,
       aperture: "f/5.6",
-      light: "Split lighting",
+      lighting_style: "Split lighting",
     },
   },
   {
@@ -119,10 +157,11 @@ export const STUDIO_CAMERA_LIBRARY: StudioCatalogCamera[] = [
     character: "Натуральная цветопередача и спокойная тональность; отлично для skin-texture.",
     best_for: ["макро-портрет", "beauty-деталь", "текстура кожи/макияжа"],
     best_combo: {
-      lens_profile: "Macro 100mm",
-      focal_mm: 105,
+      camera_format: "Hasselblad X2D 100C",
+      lens_type: "Macro 100mm",
+      focal_length_mm: 105,
       aperture: "f/4",
-      light: "Butterfly / Paramount",
+      lighting_style: "Butterfly / Paramount",
     },
   },
   {
@@ -130,259 +169,285 @@ export const STUDIO_CAMERA_LIBRARY: StudioCatalogCamera[] = [
     character: "Кино-ориентированная детализация и запас под пост/клинап.",
     best_for: ["постановочные сцены", "студийный продакшн", "multi-cam", "VFX/cleanup"],
     best_combo: {
-      lens_profile: "Spherical Prime",
-      focal_mm: 35,
+      camera_format: "Blackmagic URSA Mini Pro 12K",
+      lens_type: "Spherical Prime",
+      focal_length_mm: 35,
       aperture: "f/2.8",
-      light: "Кинематографичный направленный ключ",
+      lighting_style: "Кинематографичный направленный ключ",
     },
   },
 ];
 
-export const STUDIO_FOCAL_LENGTH_GUIDE: FocalLengthGuide[] = [
-  { label: "14-20 мм", use: ["архитектура", "establishing", "драматичная перспектива"] },
-  { label: "24 мм", use: ["широкие планы", "интерьеры", "окружение героя"] },
-  { label: "35 мм", use: ["сторителлинг", "лайфстайл", "репортажный кино-look"] },
-  { label: "50 мм", use: ["универсал", "натуральные пропорции", "предметка без искажений"] },
-  { label: "85 мм", use: ["классический портрет", "премиальный look", "separation"] },
-  { label: "100-105 мм", use: ["макро", "детали", "еда", "beauty-кроп"] },
-  { label: "135 мм", use: ["дальний план", "компрессия", "телепортрет"] },
-  { label: "200+ мм", use: ["спорт/сцена", "стрит издалека", "сильная компрессия"] },
-];
-
 export const STUDIO_LIGHT_SETUPS: LightSetupGuide[] = [
-  { name: "Мягкий ключ с деликатным заполнением", best_for: ["универсальная коммерция", "лайфстайл", "чистый портрет"] },
-  { name: "Кинематографичный направленный ключ", best_for: ["кино-портрет", "драматургия", "премиальный объем"] },
-  { name: "Контровой свет с плотным контрастом", best_for: ["силуэт", "отделение от фона", "ночной контраст"] },
-  { name: "Естественный свет через облачность", best_for: ["натуральный lifestyle", "дневной контент"] },
-  { name: "Практические источники в кадре", best_for: ["night mood", "интерьер", "мотивированный свет"] },
-  { name: "Butterfly / Paramount", best_for: ["beauty", "макро-портрет", "глянец"] },
-  { name: "Rembrandt", best_for: ["премиальный портрет", "fashion-film", "объем"] },
-  { name: "Split lighting", best_for: ["текстуры ткани", "предметка", "фактура материала"] },
-  { name: "Golden hour backlight", best_for: ["outdoor портрет", "fashion на улице", "романтика"] },
-  { name: "Blue hour ambient", best_for: ["ночной mood", "дальний план", "атмосфера"] },
-  { name: "Softbox overhead", best_for: ["макро еда", "tabletop", "съемка сверху"] },
-  { name: "Beauty dish frontal", best_for: ["beauty", "портрет для брендов", "поп-глянец"] },
+  {
+    name: "Split lighting",
+    plainMeaning: "Side light to reveal texture.",
+  },
+  {
+    name: "Rembrandt",
+    plainMeaning: "Soft dramatic portrait shape.",
+  },
+  {
+    name: "Softbox overhead",
+    plainMeaning: "Even top light for food/flat-lay.",
+  },
+  {
+    name: "Мягкий ключ с деликатным заполнением",
+    plainMeaning: "Мягкий равномерный свет для безопасного коммерческого результата.",
+  },
+  {
+    name: "Кинематографичный направленный ключ",
+    plainMeaning: "Более объемный кино-свет с контролируемыми тенями.",
+  },
+  {
+    name: "Контровой свет с плотным контрастом",
+    plainMeaning: "Сильный контур и более драматичный контраст.",
+  },
+  {
+    name: "Beauty dish frontal",
+    plainMeaning: "Ровный beauty-свет для лица и кожи.",
+  },
 ];
 
-export const STUDIO_TASK_PRESETS: StudioTaskPreset[] = [
+export const STUDIO_BEGINNER_PRESETS: StudioPreset[] = [
   {
-    id: "food-macro",
-    task: "Макро еда",
-    category: "Еда",
-    description: "Фактура блюда крупным планом, чистая коммерция.",
-    camera: "Sony A1",
-    lens_profile: "Macro 100mm",
-    focal_mm: 100,
-    aperture: "f/4",
-    light: "Softbox overhead",
+    id: "fashion-safe-catalog",
+    category: "Fashion",
+    humanTitle: "Fashion catalog safe",
+    benefit: "Чистый и стабильный вид одежды без риска по коже и фактуре. Подходит для ежедневной коммерции.",
+    goalTags: ["Catalog", "Clean portrait"],
+    recommended: true,
+    safeDefault: true,
+    whyThisWorks: [
+      "Средний фокус сохраняет натуральные пропорции модели.",
+      "Мягкий свет уменьшает шум и артефакты на ткани.",
+    ],
+    slidersMapping: { detail: 58, backgroundBlur: 45, lightDrama: 32 },
+    techSettings: {
+      camera_format: "Digital Full Frame",
+      lens_type: "Spherical Prime",
+      focal_length_mm: 50,
+      aperture: "f/4",
+      lighting_style: "Мягкий ключ с деликатным заполнением",
+    },
+    sceneSubject: "Модель в каталожной позе, одежда читается полностью",
+    sceneComposition: "Чистый фронтальный кадр, ровная геометрия, без визуального шума",
+    sceneEnvironment: "Нейтральная студия с чистым фоном",
   },
   {
-    id: "fabric-texture",
-    task: "Текстуры одежды",
-    category: "Мода",
-    description: "Ткани, швы и объем материала, максимальная читаемость фактуры.",
-    camera: "Fujifilm GFX100 II",
-    lens_profile: "Macro 100mm",
-    focal_mm: 105,
-    aperture: "f/5.6",
-    light: "Split lighting",
+    id: "fashion-beauty-gloss",
+    category: "Fashion",
+    humanTitle: "Beauty gloss portrait",
+    benefit: "Глянцевый портрет с аккуратным контрастом и контролем бликов. Хорошо для beauty-брендов.",
+    goalTags: ["Beauty gloss", "Clean portrait"],
+    recommended: true,
+    safeDefault: false,
+    whyThisWorks: [
+      "Портретный фокус помогает отделить лицо от фона.",
+      "Beauty light подчеркивает форму лица без лишней жесткости.",
+    ],
+    slidersMapping: { detail: 55, backgroundBlur: 72, lightDrama: 52 },
+    techSettings: {
+      camera_format: "Canon EOS R5",
+      lens_type: "Spherical Prime",
+      focal_length_mm: 85,
+      aperture: "f/2.0",
+      lighting_style: "Beauty dish frontal",
+    },
+    sceneSubject: "Крупный beauty-портрет с фокусом на коже и макияже",
+    sceneComposition: "Голова и плечи, спокойная поза, чистый центр кадра",
+    sceneEnvironment: "Студийный фон без отвлекающих объектов",
   },
   {
-    id: "portrait",
-    task: "Портрет",
-    category: "Люди",
-    description: "Чистый крупный портрет с кино-пластикой.",
-    camera: "ARRI ALEXA Mini LF",
-    lens_profile: "Master Prime",
-    focal_mm: 85,
-    aperture: "f/2.0",
-    light: "Rembrandt",
+    id: "people-clean-safe",
+    category: "People",
+    humanTitle: "Clean portrait safe",
+    benefit: "Натуральный портрет с мягкой пластикой лица и предсказуемым результатом для массового контента.",
+    goalTags: ["Clean portrait", "Catalog"],
+    recommended: true,
+    safeDefault: true,
+    whyThisWorks: [
+      "Умеренный фокус не искажает лицо.",
+      "Мягкий свет уменьшает риск жестких теней и артефактов.",
+    ],
+    slidersMapping: { detail: 50, backgroundBlur: 55, lightDrama: 36 },
+    techSettings: {
+      camera_format: "Digital Full Frame",
+      lens_type: "Spherical Prime",
+      focal_length_mm: 50,
+      aperture: "f/2.8",
+      lighting_style: "Мягкий ключ с деликатным заполнением",
+    },
+    sceneSubject: "Один герой в кадре с уверенным спокойным выражением",
+    sceneComposition: "Средний крупный план, взгляд в камеру, чистый фон",
+    sceneEnvironment: "Нейтральная интерьерная среда",
   },
   {
-    id: "macro-portrait",
-    task: "Макро портрет",
-    category: "Люди",
-    description: "Скин-текстура и бьюти-деталь без лишней жесткости.",
-    camera: "Hasselblad X2D 100C",
-    lens_profile: "Macro 100mm",
-    focal_mm: 105,
-    aperture: "f/4",
-    light: "Butterfly / Paramount",
+    id: "people-cinematic-drama",
+    category: "People",
+    humanTitle: "Cinematic drama portrait",
+    benefit: "Более киношный и эмоциональный портрет с объемным светом, но без потери читаемости.",
+    goalTags: ["Cinematic drama", "Night mood"],
+    recommended: false,
+    safeDefault: false,
+    whyThisWorks: [
+      "Кино-камера дает мягкий тон кожи и объем.",
+      "Направленный ключ добавляет драму без грязного шума.",
+    ],
+    slidersMapping: { detail: 48, backgroundBlur: 66, lightDrama: 68 },
+    techSettings: {
+      camera_format: "ARRI ALEXA Mini LF",
+      lens_type: "Master Prime",
+      focal_length_mm: 85,
+      aperture: "f/2.0",
+      lighting_style: "Rembrandt",
+    },
+    sceneSubject: "Герой в эмоциональном портрете с акцентом на взгляд",
+    sceneComposition: "Плотный портрет, чистый контур лица, контролируемая глубина",
+    sceneEnvironment: "Темный интерьер с читаемым фоном",
   },
   {
-    id: "night-distance",
-    task: "Ночной дальний",
-    category: "Люди",
-    description: "Темная сцена с дальним планом, атмосфера сумерек.",
-    camera: "RED V-RAPTOR 8K VV",
-    lens_profile: "Telephoto Prime",
-    focal_mm: 135,
-    aperture: "f/2.8",
-    light: "Blue hour ambient",
+    id: "food-safe-overhead",
+    category: "Food",
+    humanTitle: "Food top-shot safe",
+    benefit: "Ровный и понятный food-кадр для меню и рекламы. Быстрый старт без сложной настройки.",
+    goalTags: ["Catalog", "Texture"],
+    recommended: true,
+    safeDefault: true,
+    whyThisWorks: [
+      "Верхний мягкий свет делает блюдо чистым и читаемым.",
+      "Контроль глубины помогает сохранить детали ингредиентов.",
+    ],
+    slidersMapping: { detail: 72, backgroundBlur: 22, lightDrama: 28 },
+    techSettings: {
+      camera_format: "Sony A1",
+      lens_type: "Macro 100mm",
+      focal_length_mm: 100,
+      aperture: "f/4",
+      lighting_style: "Softbox overhead",
+    },
+    sceneSubject: "Блюдо сверху с акцентом на форму и цвет",
+    sceneComposition: "Чистый top shot, главный объект по центру",
+    sceneEnvironment: "Фуд-стол с нейтральной поверхностью",
   },
   {
-    id: "studio-interview",
-    task: "Интервью в студии",
-    category: "Люди",
-    description: "Кино-интервью: мягкий объем, контролируемые тени, премиальный тон кожи.",
-    camera: "Blackmagic URSA Mini Pro 12K",
-    lens_profile: "Spherical Prime",
-    focal_mm: 50,
-    aperture: "f/2.8",
-    light: "Кинематографичный направленный ключ",
+    id: "food-texture-macro",
+    category: "Food",
+    humanTitle: "Food macro texture",
+    benefit: "Показывает фактуру и свежесть ингредиентов крупным планом для премиального вида.",
+    goalTags: ["Texture", "Cinematic drama"],
+    recommended: false,
+    safeDefault: false,
+    whyThisWorks: [
+      "Macro-оптика подчеркивает структуру блюда.",
+      "Боковой свет раскрывает текстуру поверхности.",
+    ],
+    slidersMapping: { detail: 84, backgroundBlur: 62, lightDrama: 62 },
+    techSettings: {
+      camera_format: "Sony A1",
+      lens_type: "Macro 100mm",
+      focal_length_mm: 105,
+      aperture: "f/5.6",
+      lighting_style: "Split lighting",
+    },
+    sceneSubject: "Крупный план фактуры блюда",
+    sceneComposition: "Плотная макро-композиция с одним центром внимания",
+    sceneEnvironment: "Студийная фуд-среда с минималистичным фоном",
   },
   {
-    id: "fashion-catalog",
-    task: "Каталожка одежды на модели",
-    category: "Мода",
-    description: "Чисто, ровно, без сюрпризов: цвета и детали читаются стабильно.",
-    camera: "Digital Full Frame",
-    lens_profile: "Spherical Prime",
-    focal_mm: 50,
-    aperture: "f/4",
-    light: "Мягкий ключ с деликатным заполнением",
+    id: "product-safe-packshot",
+    category: "Product",
+    humanTitle: "Product packshot safe",
+    benefit: "Чистая предметка с контролем бликов и стабильной геометрией. Подходит для e-commerce.",
+    goalTags: ["Catalog", "Texture"],
+    recommended: true,
+    safeDefault: true,
+    whyThisWorks: [
+      "Средний фокус убирает геометрические искажения.",
+      "Мягкий ключ делает продукт чистым и коммерческим.",
+    ],
+    slidersMapping: { detail: 74, backgroundBlur: 30, lightDrama: 34 },
+    techSettings: {
+      camera_format: "Digital Full Frame",
+      lens_type: "Spherical Prime",
+      focal_length_mm: 50,
+      aperture: "f/5.6",
+      lighting_style: "Мягкий ключ с деликатным заполнением",
+    },
+    sceneSubject: "Один продукт в кадре с четкой формой",
+    sceneComposition: "Центральный packshot без лишних объектов",
+    sceneEnvironment: "Чистый студийный фон",
   },
   {
-    id: "beauty-gloss",
-    task: "Beauty (глянцевый портрет)",
-    category: "Мода",
-    description: "Ровная кожа, аккуратный контраст, контролируемые блики.",
-    camera: "Canon EOS R5",
-    lens_profile: "Spherical Prime",
-    focal_mm: 85,
-    aperture: "f/2.0",
-    light: "Beauty dish frontal",
+    id: "product-jewelry-texture",
+    category: "Product",
+    humanTitle: "Jewelry texture macro",
+    benefit: "Детализированная фактура металла и камней для премиальной ювелирной подачи.",
+    goalTags: ["Texture", "Beauty gloss"],
+    recommended: false,
+    safeDefault: false,
+    whyThisWorks: [
+      "Macro и более закрытая диафрагма удерживают мелкие детали в фокусе.",
+      "Side light добавляет графичность поверхности.",
+    ],
+    slidersMapping: { detail: 88, backgroundBlur: 36, lightDrama: 64 },
+    techSettings: {
+      camera_format: "Nikon Z8",
+      lens_type: "Macro 100mm",
+      focal_length_mm: 105,
+      aperture: "f/8",
+      lighting_style: "Split lighting",
+    },
+    sceneSubject: "Ювелирный объект крупным планом",
+    sceneComposition: "Макро-кадр с акцентом на главный элемент",
+    sceneEnvironment: "Темный чистый фон с контролируемыми бликами",
   },
   {
-    id: "jewelry-macro",
-    task: "Украшения / ювелирка макро",
-    category: "Мода",
-    description: "Максимум фактуры металла/камней, графичный объем.",
-    camera: "Nikon Z8",
-    lens_profile: "Macro 100mm",
-    focal_mm: 105,
-    aperture: "f/8",
-    light: "Split lighting",
+    id: "interiors-safe-daylight",
+    category: "Interiors",
+    humanTitle: "Interior daylight safe",
+    benefit: "Читаемый интерьерный кадр с естественной геометрией и мягким дневным тоном.",
+    goalTags: ["Catalog", "Clean portrait"],
+    recommended: true,
+    safeDefault: true,
+    whyThisWorks: [
+      "Широкий фокус показывает пространство без перегиба.",
+      "Облачный свет сохраняет натуральность и чистоту.",
+    ],
+    slidersMapping: { detail: 68, backgroundBlur: 18, lightDrama: 25 },
+    techSettings: {
+      camera_format: "Nikon Z8",
+      lens_type: "Wide Prime",
+      focal_length_mm: 24,
+      aperture: "f/5.6",
+      lighting_style: "Естественный свет через облачность",
+    },
+    sceneSubject: "Интерьер с четкой архитектурой и одним визуальным акцентом",
+    sceneComposition: "Широкий фронтальный кадр с прямыми вертикалями",
+    sceneEnvironment: "Дневной интерьер, чистый и аккуратный",
   },
   {
-    id: "cosmetics-packshot",
-    task: "Косметика packshot (премиум)",
-    category: "Мода",
-    description: "Чистый премиальный продукт с мягкими градиентами и контролем бликов.",
-    camera: "Fujifilm GFX100 II",
-    lens_profile: "Macro 100mm",
-    focal_mm: 105,
-    aperture: "f/8",
-    light: "Мягкий ключ с деликатным заполнением",
-  },
-  {
-    id: "hero-product-contrast",
-    task: "Предметка герой-кадр (high-contrast)",
-    category: "Еда",
-    description: "Отделение от фона, выразительный контур и глубина.",
-    camera: "Digital Full Frame",
-    lens_profile: "Spherical Prime",
-    focal_mm: 85,
-    aperture: "f/4",
-    light: "Контровой свет с плотным контрастом",
-  },
-  {
-    id: "lifestyle-day",
-    task: "Лайфстайл портрет днем",
-    category: "Люди",
-    description: "Натуральный дневной портрет, мягкие градиенты, естественная кожа.",
-    camera: "Canon EOS R5",
-    lens_profile: "Spherical Prime",
-    focal_mm: 50,
-    aperture: "f/2.8",
-    light: "Естественный свет через облачность",
-  },
-  {
-    id: "outdoor-fashion-golden",
-    task: "Outdoor fashion на закате",
-    category: "Мода",
-    description: "Теплый контровой, воздушная картинка, романтика и объем.",
-    camera: "ARRI ALEXA Mini LF",
-    lens_profile: "Spherical Prime",
-    focal_mm: 50,
-    aperture: "f/2.8",
-    light: "Golden hour backlight",
-  },
-  {
-    id: "neon-city-portrait",
-    task: "Портрет в неоне / в городе",
-    category: "Люди",
-    description: "Ночной портрет с атмосферой, свет мотивирован окружением.",
-    camera: "RED V-RAPTOR 8K VV",
-    lens_profile: "Spherical Prime",
-    focal_mm: 35,
-    aperture: "f/2.0",
-    light: "Практические источники в кадре",
-  },
-  {
-    id: "wide-interior-architecture",
-    task: "Архитектура интерьер (широкий)",
-    category: "Медицина",
-    description: "Читаемость пространства, аккуратные линии, естественный вид.",
-    camera: "Nikon Z8",
-    lens_profile: "Wide Prime",
-    focal_mm: 24,
-    aperture: "f/5.6",
-    light: "Естественный свет через облачность",
-  },
-  {
-    id: "cinema-broll-details",
-    task: "Кино-b-roll (детали рук/объектов)",
-    category: "Люди",
-    description: "Кино-детали с направленным объемом и контролем фона.",
-    camera: "ARRI ALEXA Mini LF",
-    lens_profile: "Spherical Prime",
-    focal_mm: 35,
-    aperture: "f/2.8",
-    light: "Кинематографичный направленный ключ",
-  },
-  {
-    id: "dynamic-product",
-    task: "Динамичная предметка (в темпе)",
-    category: "Еда",
-    description: "Быстрое движение, надежная резкость и контроль деталей.",
-    camera: "Sony A1",
-    lens_profile: "Spherical Prime",
-    focal_mm: 35,
-    aperture: "f/2.8",
-    light: "Мягкий ключ с деликатным заполнением",
-  },
-  {
-    id: "outdoor-sport-action",
-    task: "Спорт / экшен на улице",
-    category: "Люди",
-    description: "Сильное отделение, энергия, объем за счет контрового и солнца.",
-    camera: "Sony A1",
-    lens_profile: "Telephoto Prime",
-    focal_mm: 135,
-    aperture: "f/2.8",
-    light: "Golden hour backlight",
-  },
-  {
-    id: "fashion-flatlay",
-    task: "Флетлей fashion (вид сверху)",
-    category: "Мода",
-    description: "Ровная раскладка одежды/аксессуаров сверху, чистая коммерция.",
-    camera: "Sony A1",
-    lens_profile: "Spherical Prime",
-    focal_mm: 35,
-    aperture: "f/4",
-    light: "Softbox overhead",
-  },
-  {
-    id: "night-silhouette",
-    task: "Ночной силуэт / контур",
-    category: "Люди",
-    description: "Графичный контур и драматичный контраст, герой отделен от фона.",
-    camera: "RED V-RAPTOR 8K VV",
-    lens_profile: "Spherical Prime",
-    focal_mm: 50,
-    aperture: "f/2.8",
-    light: "Контровой свет с плотным контрастом",
+    id: "interiors-night-mood",
+    category: "Interiors",
+    humanTitle: "Interior night mood",
+    benefit: "Атмосферный ночной интерьер с читаемым контуром и безопасным уровнем контраста.",
+    goalTags: ["Night mood", "Cinematic drama"],
+    recommended: false,
+    safeDefault: false,
+    whyThisWorks: [
+      "Практический свет сохраняет правдоподобие сцены.",
+      "Контурный акцент отделяет главный объект от темного фона.",
+    ],
+    slidersMapping: { detail: 52, backgroundBlur: 48, lightDrama: 78 },
+    techSettings: {
+      camera_format: "RED V-RAPTOR 8K VV",
+      lens_type: "Spherical Prime",
+      focal_length_mm: 35,
+      aperture: "f/2.8",
+      lighting_style: "Практические источники в кадре",
+    },
+    sceneSubject: "Интерьерный сюжет с ночным настроением",
+    sceneComposition: "Средний план, главный объект четко отделен",
+    sceneEnvironment: "Ночной интерьер с мотивированными источниками света",
   },
 ];
