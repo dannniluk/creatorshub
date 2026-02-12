@@ -30,6 +30,10 @@ test("cinema studio flow: gallery -> studio -> packs", async ({ page }) => {
   await expect(page.getByText("Цель сцены")).toBeVisible();
   await expect(page.getByRole("button", { name: /^35 мм$/ })).toBeVisible();
   await expect(page.getByText("Движение камеры")).toHaveCount(0);
+  await expect(page.getByText("Справочник камер")).toBeVisible();
+  await expect(page.getByText("RED V-RAPTOR 8K VV").first()).toBeVisible();
+  await page.getByTestId("studio-recipe-food-macro").click();
+  await expect(page.getByTestId("scene-goal-input")).toHaveValue(/макро/i);
 
   await page.getByTestId("tab-packs").click();
   await page.getByTestId("brand-home-btn").click();

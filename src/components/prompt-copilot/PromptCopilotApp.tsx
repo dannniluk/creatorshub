@@ -67,6 +67,193 @@ const LIGHTING_OPTIONS = [
 
 const FOCAL_LENGTH_PRESETS = [16, 24, 28, 35, 50, 85, 105, 135, 200] as const;
 
+type CameraReference = {
+  name: string;
+  description: string;
+  bestFor: string;
+  pairing: string;
+};
+
+type StudioRecipe = {
+  id: string;
+  title: string;
+  summary: string;
+  scene_goal: string;
+  scene_action: string;
+  scene_environment: string;
+  core6: Pick<Core6Setup, "camera_format" | "lens_type" | "focal_length_mm" | "aperture" | "lighting_style">;
+};
+
+const CAMERA_REFERENCE: CameraReference[] = [
+  {
+    name: "Digital Full Frame",
+    description: "Базовый современный full-frame характер: чисто, предсказуемо и универсально.",
+    bestFor: "Универсальные коммерческие кадры, быстрый старт без риска.",
+    pairing: "Spherical Prime • 35 мм • f/2.8 • Мягкий ключ с деликатным заполнением",
+  },
+  {
+    name: "ARRI ALEXA Mini LF",
+    description: "Кинематографичная цветопередача и мягкий roll-off в светах.",
+    bestFor: "Портреты, fashion-film эстетика, дорогой рекламный look.",
+    pairing: "Master Prime • 85 мм • f/2.0 • Rembrandt",
+  },
+  {
+    name: "RED V-RAPTOR 8K VV",
+    description: "Высокая детализация и запас для кропа/постобработки.",
+    bestFor: "Ночные и контрастные сцены, дальние планы, VFX-heavy кадры.",
+    pairing: "Telephoto Prime • 135 мм • f/2.8 • Blue hour ambient",
+  },
+  {
+    name: "Sony A1",
+    description: "Быстрый гибрид с точным автофокусом и стабильной резкостью.",
+    bestFor: "Макро еды, динамичные предметные сцены, коммерция в темпе.",
+    pairing: "Macro 100mm • 100 мм • f/4 • Softbox overhead",
+  },
+  {
+    name: "Canon EOS R5",
+    description: "Мягкий skin-tone и аккуратный контраст в портретах.",
+    bestFor: "Портреты, beauty, контент для брендов одежды.",
+    pairing: "Spherical Prime • 50 мм • f/2.0 • Beauty dish frontal",
+  },
+  {
+    name: "Nikon Z8",
+    description: "Плотная детализация и хороший контроль текстур.",
+    bestFor: "Текстуры тканей, предметная съемка, архитектурные детали.",
+    pairing: "Macro 100mm • 105 мм • f/5.6 • Split lighting",
+  },
+  {
+    name: "Fujifilm GFX100 II",
+    description: "Medium format пластика с очень чистой микродеталью.",
+    bestFor: "Текстуры одежды, каталог, editorial still life.",
+    pairing: "Macro 100mm • 105 мм • f/5.6 • Split lighting",
+  },
+  {
+    name: "Blackmagic URSA Mini Pro 12K",
+    description: "Кино-oriented детализация для продакшн-сцен.",
+    bestFor: "Студийные сетапы с контролируемым светом и сложной фактурой.",
+    pairing: "Anamorphic Prime • 50 мм • f/2.8 • Контровой свет с плотным контрастом",
+  },
+  {
+    name: "Hasselblad X2D 100C",
+    description: "Премиальный medium format look для дорогого still-кадра.",
+    bestFor: "Макро портрет, surface photography, премиальные продуктовые сцены.",
+    pairing: "Macro 100mm • 105 мм • f/4 • Beauty dish frontal",
+  },
+  {
+    name: "Classic 16mm Film",
+    description: "Зернистая винтажная фактура с кино-настроением.",
+    bestFor: "Ретро, gritty mood, авторские атмосферные кадры.",
+    pairing: "Vintage Prime • 35 мм • f/2.8 • Контровой свет с плотным контрастом",
+  },
+];
+
+const STUDIO_RECIPES: StudioRecipe[] = [
+  {
+    id: "food-macro",
+    title: "Макро еда",
+    summary: "Съемка фактуры блюда крупным планом",
+    scene_goal: "Передать макро-фактуру блюда и ощущение свежести",
+    scene_action: "Легкий пар и капли на поверхности еды",
+    scene_environment: "Студийный фуд-сетап с нейтральным фоном",
+    core6: {
+      camera_format: "Sony A1",
+      lens_type: "Macro 100mm",
+      focal_length_mm: 100,
+      aperture: "f/4",
+      lighting_style: "Softbox overhead",
+    },
+  },
+  {
+    id: "fabric-texture",
+    title: "Текстуры одежды",
+    summary: "Ткань, швы и объем материала",
+    scene_goal: "Показать глубину и фактуру ткани в деталях",
+    scene_action: "Мягкий изгиб ткани и акцент на швах",
+    scene_environment: "Минималистичный студийный фон без отвлекающих объектов",
+    core6: {
+      camera_format: "Fujifilm GFX100 II",
+      lens_type: "Macro 100mm",
+      focal_length_mm: 105,
+      aperture: "f/5.6",
+      lighting_style: "Split lighting",
+    },
+  },
+  {
+    id: "portrait-clean",
+    title: "Портрет",
+    summary: "Чистый крупный портрет с кино-пластикой",
+    scene_goal: "Передать эмоцию героя через чистый портретный кадр",
+    scene_action: "Герой держит уверенный взгляд в камеру",
+    scene_environment: "Лаконичный интерьер с мягкой глубиной",
+    core6: {
+      camera_format: "ARRI ALEXA Mini LF",
+      lens_type: "Master Prime",
+      focal_length_mm: 85,
+      aperture: "f/2.0",
+      lighting_style: "Rembrandt",
+    },
+  },
+  {
+    id: "beauty-macro",
+    title: "Макро портрет",
+    summary: "Скин-текстура и бьюти-деталь",
+    scene_goal: "Показать натуральную текстуру кожи в премиальном стиле",
+    scene_action: "Герой слегка поворачивает лицо к ключевому свету",
+    scene_environment: "Чистый бьюти-сетап с контролируемым фоном",
+    core6: {
+      camera_format: "Hasselblad X2D 100C",
+      lens_type: "Macro 100mm",
+      focal_length_mm: 105,
+      aperture: "f/4",
+      lighting_style: "Beauty dish frontal",
+    },
+  },
+  {
+    id: "night-distance",
+    title: "Ночной дальний",
+    summary: "Темная сцена с дальним планом",
+    scene_goal: "Показать ночную атмосферу с читаемыми дальними деталями",
+    scene_action: "Герой вдалеке на фоне городских огней",
+    scene_environment: "Ночной урбан с дымкой и контровыми источниками",
+    core6: {
+      camera_format: "RED V-RAPTOR 8K VV",
+      lens_type: "Telephoto Prime",
+      focal_length_mm: 135,
+      aperture: "f/2.8",
+      lighting_style: "Blue hour ambient",
+    },
+  },
+];
+
+function focalLengthHint(value: number): string {
+  if (value <= 24) {
+    return "Ультраширокий угол: хорошо для среды и пространства.";
+  }
+  if (value <= 35) {
+    return "Широкий универсальный репортажный угол.";
+  }
+  if (value <= 60) {
+    return "Нейтральная перспектива: универсально для людей и предметки.";
+  }
+  if (value <= 105) {
+    return "Портретная зона: мягкая компрессия перспективы и отделение объекта.";
+  }
+  return "Теледиапазон: дальние планы, ночные сцены, плотная перспектива.";
+}
+
+function apertureHint(aperture: string): string {
+  if (["f/1.2", "f/1.4", "f/1.8"].includes(aperture)) {
+    return "Очень малая глубина резкости: сильный фокус на объекте.";
+  }
+  if (["f/2.0", "f/2.8"].includes(aperture)) {
+    return "Кино-универсал: баланс объема и стабильной резкости.";
+  }
+  if (["f/4", "f/5.6"].includes(aperture)) {
+    return "Более контролируемая сцена: хорошо для текстур и предметки.";
+  }
+  return "Глубокая резкость: максимум контроля и читаемости деталей.";
+}
+
 function createSetupFromPreset(preset: GalleryPreset): StudioSetup {
   return {
     preset_id: preset.id,
@@ -291,6 +478,10 @@ export default function PromptCopilotApp() {
     return generatePromptPack({ setup: studioSetup, packId: "preview", createdAt: "2026-02-12T00:00:00.000Z" });
   }, [studioSetup]);
 
+  const selectedCameraReference = useMemo(() => {
+    return CAMERA_REFERENCE.find((item) => item.name === studioSetup.core6.camera_format) ?? null;
+  }, [studioSetup.core6.camera_format]);
+
   const activePack = useMemo(() => {
     if (!activePackId) {
       return packs[0] ?? null;
@@ -311,6 +502,20 @@ export default function PromptCopilotApp() {
     setActiveTab("studio");
     setActivePreset(null);
     setSafeMessage(`Пресет «${preset.title}» применен в Студии`);
+  };
+
+  const applyStudioRecipe = (recipe: StudioRecipe) => {
+    setStudioSetup((current) => ({
+      ...current,
+      scene_goal: recipe.scene_goal,
+      scene_action: recipe.scene_action,
+      scene_environment: recipe.scene_environment,
+      core6: {
+        ...current.core6,
+        ...recipe.core6,
+      },
+    }));
+    setSafeMessage(`Сочетание «${recipe.title}» применено`);
   };
 
   const handleGeneratePack = () => {
@@ -571,6 +776,54 @@ export default function PromptCopilotApp() {
                 ))}
               </div>
 
+              <section className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <h3 className="font-display text-xl font-semibold tracking-tight">Справочник камер</h3>
+                  <p className="text-xs text-zinc-400">Что это за модель, для чего подходит и с чем сочетать.</p>
+                </div>
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  {CAMERA_REFERENCE.map((camera) => (
+                    <article key={camera.name} className="rounded-2xl border border-white/10 bg-[#101116] p-3">
+                      <p className="text-sm font-semibold text-zinc-100">{camera.name}</p>
+                      <p className="mt-1 text-xs leading-relaxed text-zinc-400">{camera.description}</p>
+                      <p className="mt-2 text-xs leading-relaxed text-zinc-300">
+                        <span className="font-semibold text-zinc-200">Для задач:</span> {camera.bestFor}
+                      </p>
+                      <p className="mt-2 rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-[11px] text-zinc-300">
+                        <span className="font-semibold text-zinc-200">Лучшее сочетание:</span> {camera.pairing}
+                      </p>
+                    </article>
+                  ))}
+                </div>
+              </section>
+
+              <section className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                <h3 className="font-display text-xl font-semibold tracking-tight">Готовые сочетания</h3>
+                <p className="mt-1 text-xs text-zinc-400">
+                  Нажми на задачу, и Студия подставит камеру, объектив, фокусное расстояние, диафрагму и свет.
+                </p>
+                <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {STUDIO_RECIPES.map((recipe) => (
+                    <article key={recipe.id} className="rounded-2xl border border-white/10 bg-[#101116] p-3">
+                      <p className="text-sm font-semibold text-zinc-100">{recipe.title}</p>
+                      <p className="mt-1 text-xs text-zinc-400">{recipe.summary}</p>
+                      <p className="mt-2 rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-[11px] text-zinc-300">
+                        {recipe.core6.camera_format} • {recipe.core6.lens_type} • {recipe.core6.focal_length_mm} мм •{" "}
+                        {recipe.core6.aperture}
+                      </p>
+                      <button
+                        type="button"
+                        data-testid={`studio-recipe-${recipe.id}`}
+                        className="mt-3 w-full rounded-full border border-white/20 bg-white/[0.06] px-3 py-2 text-xs text-zinc-200 transition hover:bg-white/[0.16]"
+                        onClick={() => applyStudioRecipe(recipe)}
+                      >
+                        Применить сочетание
+                      </button>
+                    </article>
+                  ))}
+                </div>
+              </section>
+
               <div className="mt-5 grid gap-3 md:grid-cols-2">
                 <StudioControlCard title="Камера" value={studioSetup.core6.camera_format}>
                   <select
@@ -584,6 +837,11 @@ export default function PromptCopilotApp() {
                       </option>
                     ))}
                   </select>
+                  {selectedCameraReference ? (
+                    <p className="mt-2 text-xs leading-relaxed text-zinc-400">
+                      <span className="text-zinc-300">Подходит для:</span> {selectedCameraReference.bestFor}
+                    </p>
+                  ) : null}
                 </StudioControlCard>
 
                 <StudioControlCard title="Объектив" value={studioSetup.core6.lens_type}>
@@ -626,6 +884,7 @@ export default function PromptCopilotApp() {
                       </button>
                     ))}
                   </div>
+                  <p className="mt-2 text-xs text-zinc-400">{focalLengthHint(studioSetup.core6.focal_length_mm)}</p>
                 </StudioControlCard>
 
                 <StudioControlCard title="Диафрагма" value={studioSetup.core6.aperture}>
@@ -640,6 +899,7 @@ export default function PromptCopilotApp() {
                       </option>
                     ))}
                   </select>
+                  <p className="mt-2 text-xs text-zinc-400">{apertureHint(studioSetup.core6.aperture)}</p>
                 </StudioControlCard>
 
                 <StudioControlCard title="Свет" value={studioSetup.core6.lighting_style}>
