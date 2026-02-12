@@ -27,23 +27,25 @@ test("cinema studio flow: gallery -> studio -> packs", async ({ page }) => {
 
   await page.getByTestId("tab-studio").click();
   await expect(page.getByRole("heading", { name: "Студия" })).toBeVisible();
-  await expect(page.getByText("Цель сцены")).toBeVisible();
-  await expect(page.getByRole("button", { name: /^35 мм$/ })).toBeVisible();
-  await expect(page.getByText("Движение камеры")).toHaveCount(0);
-  await expect(page.getByText("Справочник камер")).toBeVisible();
-  await expect(page.getByText("RED V-RAPTOR 8K VV").first()).toBeVisible();
-  await page.getByTestId("studio-recipe-food-macro").click();
-  await expect(page.getByTestId("scene-goal-input")).toHaveValue(/макро/i);
+  await expect(page.getByTestId("studio-view-tasks")).toBeVisible();
+  await expect(page.getByTestId("studio-view-cameras")).toBeVisible();
+  await expect(page.getByTestId("studio-task-card")).toHaveCount(9);
+  await page.getByTestId("studio-task-apply-food-macro").click();
+  await expect(page.getByTestId("studio-current-setup")).toContainText("Sony A1");
+  await page.getByTestId("studio-open-prompt-drawer").click();
+  await expect(page.getByTestId("studio-prompt-drawer")).toBeVisible();
+  await expect(page.getByText("Nano Banana Pro Prompt")).toBeVisible();
+  await page.getByTestId("studio-close-prompt-drawer").click();
+  await page.getByTestId("studio-view-cameras").click();
+  await expect(page.getByTestId("studio-camera-card")).toHaveCount(9);
+  await page.getByTestId("studio-camera-apply-red-v-raptor-8k-vv").click();
+  await expect(page.getByTestId("studio-current-setup")).toContainText("RED V-RAPTOR 8K VV");
 
   await page.getByTestId("tab-packs").click();
   await page.getByTestId("brand-home-btn").click();
   await expect(page.getByTestId("tab-gallery")).toBeVisible();
 
   await page.getByTestId("tab-studio").click();
-  await page.getByTestId("scene-goal-input").fill("Показать уверенного героя в кадре");
-  await page.getByTestId("scene-action-input").fill("Герой идет к камере сквозь дым");
-  await page.getByTestId("scene-environment-input").fill("Индустриальный док на рассвете");
-
   await page.getByTestId("generate-pack-btn").click();
 
   await expect(page.getByTestId("pack-variant-card")).toHaveCount(6);
