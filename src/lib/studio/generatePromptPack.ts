@@ -5,107 +5,80 @@ type VariantRecipe = {
   id: string;
   label: string;
   summary: string;
-  mutate: (base: Core6Setup) => Core6Setup;
+  overrides: Partial<Core6Setup>;
 };
-
-const APERTURE_STEPS = ["f/1.8", "f/2.0", "f/2.8", "f/4", "f/5.6", "f/8"] as const;
-const FOCAL_STEPS = [24, 35, 50, 85, 105, 135] as const;
-
-const REQUIRED_NEGATIVE = "no watermark, no text, no deformed faces/hands, no extra fingers, no artifacts";
-const REQUIRED_TEXT_POLICY = "NO-TEXT STRICT";
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
-
-function shiftAperture(current: string, direction: -1 | 1): string {
-  const currentIndex = APERTURE_STEPS.findIndex((item) => item === current);
-  const index = currentIndex === -1 ? 2 : currentIndex;
-  const nextIndex = clamp(index + direction, 0, APERTURE_STEPS.length - 1);
-  return APERTURE_STEPS[nextIndex] ?? current;
-}
-
-function shiftFocal(current: number, direction: -1 | 1): number {
-  const nearest = FOCAL_STEPS.reduce((closest, step) => {
-    return Math.abs(step - current) < Math.abs(closest - current) ? step : closest;
-  }, FOCAL_STEPS[0]);
-
-  const currentIndex = FOCAL_STEPS.findIndex((item) => item === nearest);
-  const index = currentIndex === -1 ? 2 : currentIndex;
-  const nextIndex = clamp(index + direction, 0, FOCAL_STEPS.length - 1);
-  return FOCAL_STEPS[nextIndex] ?? current;
-}
 
 const VARIANT_RECIPES: VariantRecipe[] = [
   {
     id: "base",
-    label: "Base",
-    summary: "Сбалансированная production-safe версия",
-    mutate: (base) => ({ ...base }),
+    label: "Базовый",
+    summary: "Исходная настройка без дополнительных изменений",
+    overrides: {},
   },
   {
-    id: "detail-plus",
-    label: "Detail+",
-    summary: "Больше читаемости деталей",
-    mutate: (base) => ({
-      ...base,
-      aperture: shiftAperture(base.aperture, 1),
-      lighting_style: "Split lighting",
-    }),
+    id: "wide",
+    label: "Широкий кадр",
+    summary: "Более широкий угол и чистая геометрия",
+    overrides: { focal_length_mm: 24, aperture: "f/4" },
   },
   {
-    id: "blur-plus",
-    label: "Blur+",
-    summary: "Более мягкий фон и отделение объекта",
-    mutate: (base) => ({
-      ...base,
-      focal_length_mm: shiftFocal(base.focal_length_mm, 1),
-      aperture: shiftAperture(base.aperture, -1),
-    }),
+    id: "tight",
+    label: "Плотный портрет",
+    summary: "Более плотный портретный фокус",
+    overrides: { focal_length_mm: 85, aperture: "f/2.0" },
   },
   {
-    id: "drama-plus",
-    label: "Drama+",
-    summary: "Более контрастный и атмосферный свет",
-    mutate: (base) => ({
-      ...base,
-      lighting_style: "Контровой свет с плотным контрастом",
-    }),
+    id: "dynamic",
+    label: "Динамика",
+    summary: "Контрастная драматичная пластика света",
+    overrides: { lighting_style: "Контровой свет с плотным контрастом", lens_type: "Anamorphic Prime" },
+  },
+  {
+    id: "soft-light",
+    label: "Мягкий свет",
+    summary: "Более мягкий свет и аккуратный контраст",
+    overrides: { lighting_style: "Мягкий ключ с деликатным заполнением" },
+  },
+  {
+    id: "clean-safe",
+    label: "Чистый безопасный",
+    summary: "Консервативная версия для стабильного результата",
+    overrides: { aperture: "f/4", lens_type: "Master Prime" },
   },
 ];
 
-function normalizeLocks(setup: StudioSetup): {
-  character: string;
-  style: string;
-  consistency: string;
-  negative: string;
-} {
-  const character = setup.locked_core.character_lock.trim() || "same subject identity across all variants";
-  const style = setup.locked_core.style_lock.trim() || "clean photoreal style";
-  const consistency = setup.locked_core.composition_lock.trim() || "stable framing and subject placement";
-  const customNegative = setup.locked_core.negative_lock.trim();
+function mergeCore6(base: Core6Setup, overrides: Partial<Core6Setup>): Core6Setup {
+  return {
+    ...base,
+    ...overrides,
+  };
+}
 
-  const negative = customNegative
-    ? `${REQUIRED_NEGATIVE}; ${customNegative}`
-    : REQUIRED_NEGATIVE;
-
-  return { character, style, consistency, negative };
+function buildCommonScene(setup: StudioSetup, core6: Core6Setup): string[] {
+  return [
+    `SCENE GOAL: ${setup.scene_goal}`,
+    `SCENE ACTION: ${setup.scene_action}`,
+    `SCENE ENVIRONMENT: ${setup.scene_environment}`,
+    `CAMERA FORMAT: ${core6.camera_format}`,
+    `LENS TYPE: ${core6.lens_type}`,
+    `FOCAL LENGTH: ${core6.focal_length_mm}mm`,
+    `APERTURE: ${core6.aperture}`,
+    `LIGHTING STYLE: ${core6.lighting_style}`,
+    `CHARACTER LOCK: ${setup.locked_core.character_lock}`,
+    `STYLE LOCK: ${setup.locked_core.style_lock}`,
+    `COMPOSITION LOCK: ${setup.locked_core.composition_lock}`,
+    `NEGATIVE LOCK: ${setup.locked_core.negative_lock}`,
+    `TEXT POLICY: ${setup.locked_core.text_policy}`,
+  ];
 }
 
 function buildNanoPrompt(setup: StudioSetup, core6: Core6Setup): string {
-  const locks = normalizeLocks(setup);
-
+  const lines = buildCommonScene(setup, core6);
   return [
     "Nano Banana Pro Prompt",
-    `INTENT: ${setup.scene_goal}`,
-    `SUBJECT: ${setup.scene_action}`,
-    `COMPOSITION: ${locks.consistency}`,
-    `ENVIRONMENT: ${setup.scene_environment}`,
-    `CAMERA EMULATION: ${core6.camera_format}, ${core6.lens_type}, ${core6.focal_length_mm}mm, ${core6.aperture}`,
-    `LIGHTING: ${core6.lighting_style}`,
-    `LOCKS: character=${locks.character}; style=${locks.style}; consistency=${locks.consistency}`,
-    `NEGATIVE CONSTRAINTS: ${locks.negative}`,
-    `TEXT POLICY: ${REQUIRED_TEXT_POLICY}`,
+    "Intent: photoreal cinematic frame with production-safe clarity.",
+    ...lines,
+    "QUALITY NOTES: avoid artifacts, preserve visual consistency, no text in frame.",
   ].join("\n");
 }
 
@@ -127,7 +100,7 @@ export function generatePromptPack(input: {
     created_at: createdAt,
     setup_snapshot: structuredClone(input.setup),
     variants: VARIANT_RECIPES.map((recipe) => {
-      const core6 = recipe.mutate(input.setup.core6);
+      const core6 = mergeCore6(input.setup.core6, recipe.overrides);
       return {
         id: recipe.id,
         label: recipe.label,
