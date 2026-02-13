@@ -9,8 +9,6 @@ import {
   CATEGORY_LABELS,
   type CreatorCategory,
   GOAL_LABELS,
-  STUDIO_CAMERA_LIBRARY,
-  STUDIO_LIGHT_SETUPS,
   STUDIO_TASK_PRESETS,
   STUDIO_TERM_GUIDE,
   type GoalTag,
@@ -18,10 +16,28 @@ import {
   type TechSettings,
 } from "@/lib/studio/catalog";
 import { studioPresetCollectionSchema } from "@/lib/studio/presetSchema";
+import {
+  PRO_APERTURE_PRESETS,
+  PRO_CAMERA_OPTIONS,
+  PRO_FOCAL_OPTIONS,
+  PRO_LIGHTING_OPTIONS,
+  PRO_LENS_OPTIONS,
+  PRO_LOCK_TEXT,
+  type ProWizardState,
+  type ProWizardStep,
+  clampProStep,
+  createDefaultProWizard,
+  explainFocalLength,
+  mapBlurSliderToAperture,
+  nextProStep,
+  patchProWizard,
+  prevProStep,
+  withTaskSceneDefaults,
+} from "@/lib/studio/proMode";
 import type { Core6Setup, GalleryPreset, PromptPack, PromptPackVariant, StudioSetup } from "@/lib/studio/types";
 
 type TabKey = "gallery" | "studio" | "packs" | "reference";
-type AdvancedMode = "simple" | "pro";
+type StudioMode = "beginner" | "pro";
 type SceneKey = "goal" | "action" | "environment";
 
 type SceneDraft = {
@@ -38,12 +54,16 @@ type PostCopyPanelState = {
   promptMode: PromptMode;
 };
 
+type ProLockToggleKey = "characterLock" | "styleLock" | "compositionLock" | "noTextStrict";
+
 const VALIDATED_TASK_PRESETS = studioPresetCollectionSchema.parse(STUDIO_TASK_PRESETS);
 
 const STORAGE_KEYS = {
   tab: "prompt-copilot/cinema/tab",
   packs: "prompt-copilot/cinema/packs",
   onboardingDismissed: "prompt-copilot/cinema/onboarding-dismissed",
+  studioMode: "prompt-copilot/cinema/studio-mode",
+  proWizard: "prompt-copilot/cinema/pro-wizard",
 };
 
 const GALLERY_CHUNK_SIZE = 8;
@@ -137,20 +157,6 @@ function getPresetById(id: string): StudioTaskPreset {
   return VALIDATED_TASK_PRESETS.find((preset) => preset.id === id) ?? VALIDATED_TASK_PRESETS[0]!;
 }
 
-function nextSceneLine(lines: string[], current: string): string {
-  if (lines.length === 0) {
-    return current;
-  }
-
-  if (lines.length === 1) {
-    return lines[0] ?? current;
-  }
-
-  const currentIndex = lines.findIndex((line) => line === current);
-  const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % lines.length;
-  return lines[nextIndex] ?? current;
-}
-
 function makeInitialSceneDraft(preset: StudioTaskPreset): SceneDraft {
   return {
     goal: preset.sceneTemplates.goal[0] ?? "",
@@ -237,6 +243,49 @@ function buildPresetPromptPreview(input: { preset: StudioTaskPreset; setup: Stud
   return {
     compact: renderPromptTemplate(preset.promptTemplateCompact, tokens),
     full: renderPromptTemplate(preset.promptTemplateFull, tokens),
+  };
+}
+
+function apertureToSliderValue(aperture: string): number {
+  const index = PRO_APERTURE_PRESETS.findIndex((item) => item === aperture);
+  if (index === -1) {
+    return 25;
+  }
+  return index * 25;
+}
+
+function buildSetupFromProWizard(input: { preset: StudioTaskPreset; wizard: ProWizardState }): StudioSetup {
+  const negativeLock = Array.from(new Set([...REQUIRED_NEGATIVE_CONSTRAINTS, ...input.wizard.locks.negativeLock])).join(", ");
+
+  return {
+    preset_id: input.preset.id,
+    preset_title: "Pro режим",
+    scene_goal: input.wizard.scene.goal,
+    scene_action: input.wizard.scene.action,
+    scene_environment: input.wizard.scene.environment,
+    core6: {
+      camera_format: input.wizard.camera,
+      lens_type: input.wizard.lens_profile,
+      focal_length_mm: input.wizard.focal_mm,
+      aperture: input.wizard.aperture,
+      lighting_style: input.wizard.lighting_style,
+      camera_movement: "Статичный кадр",
+    },
+    locked_core: {
+      character_lock: input.wizard.locks.characterLock ? PRO_LOCK_TEXT.character : "off",
+      style_lock: input.wizard.locks.styleLock ? PRO_LOCK_TEXT.style : "off",
+      composition_lock: input.wizard.locks.compositionLock ? PRO_LOCK_TEXT.composition : "off",
+      negative_lock: negativeLock,
+      text_policy: "NO-TEXT STRICT",
+    },
+    meta: {
+      category: input.preset.category,
+      goal: input.preset.goal,
+      human_title: `Pro: ${input.preset.humanTitle}`,
+      benefit: input.preset.benefit,
+      result_chips: input.preset.resultChips,
+      why_works: input.preset.whyWorks,
+    },
   };
 }
 
@@ -334,8 +383,41 @@ export default function PromptCopilotApp() {
   const [selectedPresetId, setSelectedPresetId] = useState(starterPreset.id);
   const [sceneDraft, setSceneDraft] = useState<SceneDraft>(() => makeInitialSceneDraft(starterPreset));
   const [techOverrides, setTechOverrides] = useState<Partial<TechSettings>>({});
-  const [advancedOpen, setAdvancedOpen] = useState(false);
-  const [advancedMode, setAdvancedMode] = useState<AdvancedMode>("simple");
+  const [studioMode, setStudioMode] = useState<StudioMode>(() => {
+    if (typeof window === "undefined") {
+      return "beginner";
+    }
+
+    const stored = safeParse<StudioMode>(localStorage.getItem(STORAGE_KEYS.studioMode));
+    return stored === "pro" ? "pro" : "beginner";
+  });
+  const [proWizard, setProWizard] = useState<ProWizardState>(() => {
+    if (typeof window === "undefined") {
+      return createDefaultProWizard();
+    }
+
+    const stored = safeParse<Partial<ProWizardState>>(localStorage.getItem(STORAGE_KEYS.proWizard));
+    if (!stored) {
+      return createDefaultProWizard();
+    }
+
+    const restored = patchProWizard(createDefaultProWizard(), {
+      step: clampProStep(Number(stored.step ?? 1)),
+      camera: stored.camera,
+      lens_profile: stored.lens_profile,
+      focal_mm: stored.focal_mm,
+      aperture: stored.aperture,
+      lighting_style: stored.lighting_style,
+      scene: stored.scene,
+      locks: stored.locks,
+    });
+
+    return restored;
+  });
+  const [proPromptDrawerOpen, setProPromptDrawerOpen] = useState(false);
+  const [proPromptMode, setProPromptMode] = useState<PromptMode>("compact");
+  const [proAdvancedOpen, setProAdvancedOpen] = useState(false);
+  const [proApertureSliderValue, setProApertureSliderValue] = useState(() => apertureToSliderValue(createDefaultProWizard().aperture));
   const [detailsPresetId, setDetailsPresetId] = useState<string | null>(null);
   const [detailsPromptMode, setDetailsPromptMode] = useState<PromptMode>("compact");
   const [postCopyPanel, setPostCopyPanel] = useState<PostCopyPanelState | null>(null);
@@ -348,6 +430,7 @@ export default function PromptCopilotApp() {
   });
   const detailsPanelRef = useRef<HTMLDivElement | null>(null);
   const postCopyPanelRef = useRef<HTMLDivElement | null>(null);
+  const proPromptDrawerRef = useRef<HTMLDivElement | null>(null);
 
   const [packs, setPacks] = useState<PromptPack[]>(() => {
     if (typeof window === "undefined") {
@@ -386,6 +469,13 @@ export default function PromptCopilotApp() {
     });
   }, [effectiveTech, sceneDraft, selectedPreset]);
 
+  const proSetup = useMemo(() => {
+    return buildSetupFromProWizard({
+      preset: selectedPreset,
+      wizard: proWizard,
+    });
+  }, [proWizard, selectedPreset]);
+
   const safeDefaultByCategory = useMemo(() => {
     const result: Partial<Record<CreatorCategory, string>> = {};
     for (const preset of VALIDATED_TASK_PRESETS) {
@@ -405,28 +495,6 @@ export default function PromptCopilotApp() {
     }
     return packs.find((pack) => pack.id === activePackId) ?? null;
   }, [activePackId, packs]);
-
-  const lightOptions = useMemo(
-    () => Array.from(new Set(STUDIO_LIGHT_SETUPS.map((item) => item.name))),
-    [],
-  );
-
-  const lensOptions = useMemo(
-    () =>
-      Array.from(
-        new Set([
-          ...VALIDATED_TASK_PRESETS.map((preset) => preset.defaults.lens_profile),
-          "Spherical Prime",
-          "Master Prime",
-          "Macro 100mm",
-          "Wide Prime",
-          "Telephoto Prime",
-        ]),
-      ),
-    [],
-  );
-
-  const apertureOptions = ["f/2.0", "f/2.8", "f/4", "f/5.6", "f/8"] as const;
 
   const activeDetailsPreset = detailsPresetId ? getPresetById(detailsPresetId) : null;
   const activePostCopyPreset = postCopyPanel?.presetId ? getPresetById(postCopyPanel.presetId) : null;
@@ -497,6 +565,8 @@ export default function PromptCopilotApp() {
   const activePostCopyPreview = activePostCopyPreset
     ? buildPresetPromptPreview({ preset: activePostCopyPreset, setup: buildSetupForPreset(activePostCopyPreset) })
     : null;
+  const proPromptPreview = proWizard.output;
+  const proFocalExplanation = explainFocalLength(proWizard.focal_mm);
 
   useFocusTrap({
     active: Boolean(activeDetailsPreset),
@@ -510,6 +580,12 @@ export default function PromptCopilotApp() {
     onEscape: () => setPostCopyPanel(null),
   });
 
+  useFocusTrap({
+    active: proPromptDrawerOpen,
+    containerRef: proPromptDrawerRef,
+    onEscape: () => setProPromptDrawerOpen(false),
+  });
+
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.tab, JSON.stringify(activeTab));
   }, [activeTab]);
@@ -517,6 +593,14 @@ export default function PromptCopilotApp() {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.packs, JSON.stringify(packs));
   }, [packs]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.studioMode, JSON.stringify(studioMode));
+  }, [studioMode]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.proWizard, JSON.stringify(proWizard));
+  }, [proWizard]);
 
   useEffect(() => {
     if (!toast) {
@@ -618,19 +702,135 @@ export default function PromptCopilotApp() {
     setToast({ kind: "success", text: "Набор открыт в Студии" });
   };
 
-  const updateSceneFromTemplate = (key: SceneKey, value: string) => {
-    setSceneDraft((current) => ({
-      ...current,
-      [key]: value,
-    }));
+  const patchWizardState = (patch: Partial<Omit<ProWizardState, "output">>) => {
+    setProWizard((current) => patchProWizard(current, patch));
   };
 
-  const rotateSceneTemplate = (key: SceneKey) => {
-    const lines = selectedPreset.sceneTemplates[key];
-    setSceneDraft((current) => ({
-      ...current,
-      [key]: nextSceneLine(lines, current[key]),
-    }));
+  const openProFromPreset = (preset: StudioTaskPreset) => {
+    selectTaskPreset(preset);
+    const baseWizard = createDefaultProWizard({
+      step: 1,
+      camera: preset.defaults.camera,
+      lens_profile: preset.defaults.lens_profile,
+      focal_mm: preset.defaults.focal_mm,
+      aperture: preset.defaults.aperture,
+      lighting_style: preset.defaults.lighting,
+      scene: withTaskSceneDefaults(preset),
+    });
+    setProWizard(baseWizard);
+    setProApertureSliderValue(apertureToSliderValue(baseWizard.aperture));
+    setStudioMode("pro");
+    setProPromptDrawerOpen(false);
+  };
+
+  const goToProStep = (step: ProWizardStep) => {
+    patchWizardState({ step });
+  };
+
+  const handleProBack = () => {
+    patchWizardState({ step: prevProStep(proWizard.step) });
+  };
+
+  const handleProCameraSelect = (camera: string) => {
+    patchWizardState({
+      camera,
+      step: nextProStep(1),
+    });
+  };
+
+  const handleProLensSelect = (lens: string) => {
+    patchWizardState({
+      lens_profile: lens,
+      step: nextProStep(2),
+    });
+  };
+
+  const handleProFocalSelect = (focal: number) => {
+    patchWizardState({
+      focal_mm: focal,
+      step: nextProStep(3),
+    });
+  };
+
+  const handleProApertureSelect = (aperture: string, sliderValue?: number) => {
+    patchWizardState({
+      aperture,
+      step: nextProStep(4),
+    });
+    if (typeof sliderValue === "number") {
+      setProApertureSliderValue(sliderValue);
+      return;
+    }
+    setProApertureSliderValue(apertureToSliderValue(aperture));
+  };
+
+  const handleProLightingSelect = (lighting: string) => {
+    patchWizardState({
+      lighting_style: lighting,
+      step: nextProStep(5),
+    });
+  };
+
+  const handleProSceneUpdate = (key: SceneKey, value: string) => {
+    patchWizardState({
+      scene: {
+        ...proWizard.scene,
+        [key]: value,
+      },
+    });
+  };
+
+  const handleProDrawerCopy = async () => {
+    await handleCopyText(proPromptPreview.compactPrompt);
+  };
+
+  const handleProAddToPack = () => {
+    handleGeneratePack(proSetup);
+  };
+
+  const handleProReset = () => {
+    const reset = createDefaultProWizard({
+      scene: withTaskSceneDefaults(selectedPreset),
+    });
+    setProWizard(reset);
+    setProApertureSliderValue(apertureToSliderValue(reset.aperture));
+    setToast({ kind: "success", text: "Pro настройки сброшены" });
+  };
+
+  const handleProLockToggle = (key: ProLockToggleKey) => {
+    patchWizardState({
+      locks: {
+        ...proWizard.locks,
+        [key]: !proWizard.locks[key],
+      },
+    });
+  };
+
+  const handleProNegativeLockChange = (value: string) => {
+    const nextItems = value
+      .split(/[\n,]/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+    patchWizardState({
+      locks: {
+        ...proWizard.locks,
+        negativeLock: nextItems,
+      },
+    });
+  };
+
+  const handleProWizardKeyDown: React.KeyboardEventHandler<HTMLDivElement> = (event) => {
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      handleProBack();
+      return;
+    }
+
+    if (event.key === "ArrowRight") {
+      event.preventDefault();
+      patchWizardState({ step: clampProStep(proWizard.step + 1) });
+    }
   };
 
   const applyReferenceTerm = (termId: string) => {
@@ -773,168 +973,476 @@ export default function PromptCopilotApp() {
         ) : null}
 
         {activeTab === "studio" ? (
-          <section className="mt-4 space-y-4 pb-20">
+          <section className="mt-4 space-y-4 pb-24">
             <div className="rounded-3xl border border-white/10 bg-[#07080a]/95 p-4 backdrop-blur-md md:p-6">
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <h2 className="font-display text-3xl font-semibold tracking-tight">Студия для новичков</h2>
-                  <p className="mt-1 text-sm text-zinc-400">Выбери задачу, нажми «Скопировать промпт» и сразу работай в модели.</p>
+                  <h2 className="font-display text-3xl font-semibold tracking-tight">
+                    {studioMode === "beginner" ? "Студия для новичков" : "Pro режим"}
+                  </h2>
+                  <p className="mt-1 text-sm text-zinc-400">
+                    {studioMode === "beginner"
+                      ? "Выбери задачу, нажми «Скопировать промпт» и сразу работай в модели."
+                      : "Пошаговая сборка production-safe промпта: Камера → Объектив → Фокусное → Диафрагма → Свет → Финал."}
+                  </p>
                 </div>
-                <span className="rounded-full border border-sky-400/30 bg-sky-400/10 px-3 py-1 text-xs font-medium text-sky-200">
-                  Минималистичный режим
-                </span>
-              </div>
 
-              {showOnboardingTip ? (
-                <div className="mb-4 rounded-2xl border border-white/10 bg-[#101217] p-3 text-xs text-zinc-300">
-                  <p>Подсказка: копирование с карточки сразу дает компактный production-safe промпт.</p>
+                <div className="inline-flex rounded-full border border-white/10 bg-white/[0.04] p-1">
                   <button
                     type="button"
-                    className="mt-2 rounded-full border border-white/20 bg-white/[0.06] px-3 py-1 text-[11px] text-zinc-100"
-                    onClick={() => {
-                      setShowOnboardingTip(false);
-                      localStorage.setItem(STORAGE_KEYS.onboardingDismissed, "1");
-                    }}
-                  >
-                    Не показывать снова
-                  </button>
-                </div>
-              ) : null}
-
-              <div className="mb-4 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  className={`rounded-full border px-3 py-1 text-xs transition ${
-                    studioCategoryFilter === "Все"
-                      ? "border-white/40 bg-white text-zinc-950"
-                      : "border-white/10 bg-white/[0.04] text-zinc-300 hover:bg-white/[0.12]"
-                  }`}
-                  onClick={() => setStudioCategoryFilter("Все")}
-                >
-                  Все
-                </button>
-                {BEGINNER_CATEGORIES.map((category) => (
-                  <button
-                    key={category}
-                    type="button"
-                    className={`rounded-full border px-3 py-1 text-xs transition ${
-                      studioCategoryFilter === category
-                        ? "border-white/40 bg-white text-zinc-950"
-                        : "border-white/10 bg-white/[0.04] text-zinc-300 hover:bg-white/[0.12]"
+                    className={`rounded-full px-4 py-1.5 text-xs transition ${
+                      studioMode === "beginner" ? "bg-white text-zinc-950" : "text-zinc-300 hover:bg-white/[0.1]"
                     }`}
-                    onClick={() => setStudioCategoryFilter(category)}
+                    onClick={() => setStudioMode("beginner")}
                   >
-                    {CATEGORY_LABELS[category]}
+                    Минималистичный режим
                   </button>
-                ))}
+                  <button
+                    type="button"
+                    className={`rounded-full px-4 py-1.5 text-xs transition ${
+                      studioMode === "pro" ? "bg-white text-zinc-950" : "text-zinc-300 hover:bg-white/[0.1]"
+                    }`}
+                    onClick={() => setStudioMode("pro")}
+                  >
+                    Pro режим
+                  </button>
+                </div>
               </div>
 
-              <label className="mb-4 block">
-                <span className="mb-2 block text-xs uppercase tracking-[0.16em] text-zinc-500">Поиск задач</span>
-                <input
-                  type="search"
-                  className="w-full rounded-2xl border border-white/10 bg-[#0d0f14] px-4 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-white/25"
-                  placeholder="Например: портрет, каталожка, фактура"
-                  value={studioQuery}
-                  onChange={(event) => setStudioQuery(event.target.value)}
-                />
-              </label>
+              {studioMode === "beginner" ? (
+                <>
+                  {showOnboardingTip ? (
+                    <div className="mb-4 rounded-2xl border border-white/10 bg-[#101217] p-3 text-xs text-zinc-300">
+                      <p>Подсказка: копирование с карточки сразу дает компактный production-safe промпт.</p>
+                      <button
+                        type="button"
+                        className="mt-2 rounded-full border border-white/20 bg-white/[0.06] px-3 py-1 text-[11px] text-zinc-100"
+                        onClick={() => {
+                          setShowOnboardingTip(false);
+                          localStorage.setItem(STORAGE_KEYS.onboardingDismissed, "1");
+                        }}
+                      >
+                        Не показывать снова
+                      </button>
+                    </div>
+                  ) : null}
 
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {filteredTaskPresets.map((preset) => {
-                  const isSafeDefault = safeDefaultByCategory[preset.category] === preset.id;
-                  return (
-                    <article key={preset.id} data-testid="studio-task-card" className="rounded-2xl border border-white/10 bg-[#0d0f14] p-4">
-                      <div className="flex items-start justify-between gap-2">
-                        <p className="font-display text-2xl leading-tight text-zinc-100">{preset.humanTitle}</p>
-                        {isSafeDefault ? (
-                          <span className="rounded-full border border-sky-300/35 bg-sky-300/10 px-2 py-1 text-[10px] text-sky-200">Безопасный старт</span>
-                        ) : null}
-                      </div>
+                  <div className="mb-4 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className={`rounded-full border px-3 py-1 text-xs transition ${
+                        studioCategoryFilter === "Все"
+                          ? "border-white/40 bg-white text-zinc-950"
+                          : "border-white/10 bg-white/[0.04] text-zinc-300 hover:bg-white/[0.12]"
+                      }`}
+                      onClick={() => setStudioCategoryFilter("Все")}
+                    >
+                      Все
+                    </button>
+                    {BEGINNER_CATEGORIES.map((category) => (
+                      <button
+                        key={category}
+                        type="button"
+                        className={`rounded-full border px-3 py-1 text-xs transition ${
+                          studioCategoryFilter === category
+                            ? "border-white/40 bg-white text-zinc-950"
+                            : "border-white/10 bg-white/[0.04] text-zinc-300 hover:bg-white/[0.12]"
+                        }`}
+                        onClick={() => setStudioCategoryFilter(category)}
+                      >
+                        {CATEGORY_LABELS[category]}
+                      </button>
+                    ))}
+                  </div>
 
-                      <p className="mt-2 truncate text-sm text-zinc-400">{preset.benefit}</p>
+                  <label className="mb-4 block">
+                    <span className="mb-2 block text-xs uppercase tracking-[0.16em] text-zinc-500">Поиск задач</span>
+                    <input
+                      type="search"
+                      className="w-full rounded-2xl border border-white/10 bg-[#0d0f14] px-4 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-white/25"
+                      placeholder="Например: портрет, каталожка, фактура"
+                      value={studioQuery}
+                      onChange={(event) => setStudioQuery(event.target.value)}
+                    />
+                  </label>
 
-                      <div className="mt-3 flex flex-wrap gap-1.5">
-                        {preset.resultChips.slice(0, 4).map((chip) => (
-                          <span
-                            key={`${preset.id}-${chip}`}
-                            className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] text-zinc-300"
+                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    {filteredTaskPresets.map((preset) => {
+                      const isSafeDefault = safeDefaultByCategory[preset.category] === preset.id;
+                      return (
+                        <article key={preset.id} data-testid="studio-task-card" className="rounded-2xl border border-white/10 bg-[#0d0f14] p-4">
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="font-display text-2xl leading-tight text-zinc-100">{preset.humanTitle}</p>
+                            {isSafeDefault ? (
+                              <span className="rounded-full border border-sky-300/35 bg-sky-300/10 px-2 py-1 text-[10px] text-sky-200">
+                                Безопасный старт
+                              </span>
+                            ) : null}
+                          </div>
+
+                          <p className="mt-2 truncate text-sm text-zinc-400">{preset.benefit}</p>
+
+                          <div className="mt-3 flex flex-wrap gap-1.5">
+                            {preset.resultChips.slice(0, 4).map((chip) => (
+                              <span
+                                key={`${preset.id}-${chip}`}
+                                className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] text-zinc-300"
+                              >
+                                {chip}
+                              </span>
+                            ))}
+                          </div>
+
+                          <button
+                            type="button"
+                            data-testid={`copy-prompt-${preset.id}`}
+                            aria-label={`Скопировать промпт для задачи ${preset.humanTitle}`}
+                            className="mt-4 w-full rounded-full bg-white px-4 py-2 text-sm font-semibold text-zinc-950 transition hover:bg-zinc-200"
+                            onClick={() => void handleCopyPresetCompact(preset)}
                           >
-                            {chip}
-                          </span>
-                        ))}
-                      </div>
+                            Скопировать промпт
+                          </button>
+
+                          <button
+                            type="button"
+                            data-testid={`details-${preset.id}`}
+                            aria-label={`Открыть детали для задачи ${preset.humanTitle}`}
+                            className="mt-2 w-full rounded-full border border-white/20 bg-white/[0.06] px-4 py-2 text-xs text-zinc-100 transition hover:bg-white/[0.14]"
+                            onClick={() => handleShowPresetDetails(preset)}
+                          >
+                            Детали
+                          </button>
+                        </article>
+                      );
+                    })}
+                  </div>
+
+                  {filteredTaskPresets.length === 0 ? (
+                    <p className="mt-4 text-sm text-zinc-400">По этому фильтру пока нет карточек. Попробуйте другую категорию или поиск.</p>
+                  ) : null}
+                </>
+              ) : (
+                <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+                  <div
+                    data-testid="pro-wizard"
+                    className="rounded-2xl border border-white/10 bg-[#0d0f14] p-4"
+                    tabIndex={0}
+                    onKeyDown={handleProWizardKeyDown}
+                    aria-label="Пошаговый Pro мастер"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <button
+                        type="button"
+                        className="rounded-full border border-white/20 bg-white/[0.05] px-3 py-1.5 text-xs text-zinc-100 disabled:opacity-40"
+                        onClick={handleProBack}
+                        disabled={proWizard.step === 1}
+                      >
+                        Назад
+                      </button>
+
+                      <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">Шаг {proWizard.step} / 6</p>
 
                       <button
                         type="button"
-                        data-testid={`copy-prompt-${preset.id}`}
-                        aria-label={`Скопировать промпт для задачи ${preset.humanTitle}`}
-                        className="mt-4 w-full rounded-full bg-white px-4 py-2 text-sm font-semibold text-zinc-950 transition hover:bg-zinc-200"
-                        onClick={() => void handleCopyPresetCompact(preset)}
+                        className="rounded-full border border-white/20 bg-white/[0.05] px-3 py-1.5 text-xs text-zinc-100"
+                        onClick={handleProReset}
+                      >
+                        Сброс
+                      </button>
+                    </div>
+
+                    <div className="mt-3 grid grid-cols-3 gap-1.5 md:grid-cols-6">
+                      {[
+                        ["Камера", 1],
+                        ["Объектив", 2],
+                        ["Фокусное", 3],
+                        ["Диафрагма", 4],
+                        ["Свет", 5],
+                        ["Финал", 6],
+                      ].map(([label, value]) => {
+                        const stepValue = value as ProWizardStep;
+                        const isActive = proWizard.step === stepValue;
+                        const isPast = stepValue < proWizard.step;
+
+                        return (
+                          <button
+                            key={label}
+                            type="button"
+                            className={`rounded-xl px-2 py-2 text-[11px] transition ${
+                              isActive
+                                ? "bg-white text-zinc-950"
+                                : isPast
+                                  ? "bg-white/[0.08] text-zinc-100 hover:bg-white/[0.14]"
+                                  : "bg-white/[0.03] text-zinc-500"
+                            }`}
+                            onClick={() => goToProStep(stepValue)}
+                            disabled={stepValue > proWizard.step}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <div className="mt-4 overflow-hidden">
+                      <div
+                        className="flex w-[600%] transition-transform duration-500 ease-out"
+                        style={{ transform: `translateX(-${(proWizard.step - 1) * 16.6667}%)` }}
+                      >
+                        <section className="w-full shrink-0 pr-4">
+                          <h3 className="text-sm font-semibold text-zinc-100">1. Выбери камеру</h3>
+                          <div data-testid="pro-step-camera-grid" className="mt-3 grid gap-2 sm:grid-cols-3 xl:grid-cols-4">
+                            {PRO_CAMERA_OPTIONS.map((camera) => (
+                              <button
+                                key={camera.label}
+                                type="button"
+                                className={`rounded-2xl border p-3 text-left transition ${
+                                  proWizard.camera === camera.label
+                                    ? "border-white/40 bg-white/[0.11]"
+                                    : "border-white/10 bg-white/[0.03] hover:bg-white/[0.08]"
+                                }`}
+                                onClick={() => handleProCameraSelect(camera.label)}
+                              >
+                                <p className="text-sm font-semibold text-zinc-100">{camera.label}</p>
+                                <p className="mt-1 text-[11px] text-zinc-400">{camera.bestFor}</p>
+                                <div className="mt-2 flex flex-wrap gap-1">
+                                  {camera.chips.map((chip) => (
+                                    <span key={`${camera.label}-${chip}`} className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] text-zinc-300">
+                                      {chip}
+                                    </span>
+                                  ))}
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        </section>
+
+                        <section className="w-full shrink-0 pr-4">
+                          <h3 className="text-sm font-semibold text-zinc-100">2. Выбери тип объектива</h3>
+                          <div data-testid="pro-step-lens-grid" className="mt-3 grid gap-2 sm:grid-cols-3 xl:grid-cols-4">
+                            {PRO_LENS_OPTIONS.map((lens) => (
+                              <button
+                                key={lens.label}
+                                type="button"
+                                className={`rounded-2xl border p-3 text-left transition ${
+                                  proWizard.lens_profile === lens.label
+                                    ? "border-white/40 bg-white/[0.11]"
+                                    : "border-white/10 bg-white/[0.03] hover:bg-white/[0.08]"
+                                }`}
+                                onClick={() => handleProLensSelect(lens.label)}
+                              >
+                                <p className="text-sm font-semibold text-zinc-100">{lens.label}</p>
+                                <p className="mt-1 text-[11px] text-zinc-400">{lens.effect}</p>
+                              </button>
+                            ))}
+                          </div>
+                        </section>
+
+                        <section className="w-full shrink-0 pr-4">
+                          <h3 className="text-sm font-semibold text-zinc-100">3. Выбери фокусное расстояние</h3>
+                          <div data-testid="pro-step-focal-grid" className="mt-3 grid grid-cols-4 gap-2">
+                            {PRO_FOCAL_OPTIONS.map((focal) => (
+                              <button
+                                key={focal}
+                                type="button"
+                                className={`rounded-xl border px-3 py-2 text-sm transition ${
+                                  proWizard.focal_mm === focal
+                                    ? "border-white/40 bg-white text-zinc-950"
+                                    : "border-white/10 bg-white/[0.04] text-zinc-100 hover:bg-white/[0.1]"
+                                }`}
+                                onClick={() => handleProFocalSelect(focal)}
+                              >
+                                {focal}
+                              </button>
+                            ))}
+                          </div>
+                          <p className="mt-3 text-xs text-zinc-400">{proFocalExplanation}</p>
+                        </section>
+
+                        <section className="w-full shrink-0 pr-4">
+                          <h3 className="text-sm font-semibold text-zinc-100">4. Настрой диафрагму</h3>
+                          <label className="mt-3 block rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+                            <span className="text-xs text-zinc-400">Больше размытия ↔ Больше деталей</span>
+                            <input
+                              type="range"
+                              min={0}
+                              max={100}
+                              value={proApertureSliderValue}
+                              className="mt-3 w-full accent-white"
+                              onChange={(event) => {
+                                const slider = Number(event.target.value);
+                                const mapped = mapBlurSliderToAperture(slider);
+                                handleProApertureSelect(mapped, slider);
+                              }}
+                            />
+                            <p className="mt-2 text-sm text-zinc-200">Текущее: {proWizard.aperture}</p>
+                          </label>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {PRO_APERTURE_PRESETS.map((aperture) => (
+                              <button
+                                key={aperture}
+                                type="button"
+                                className={`rounded-full border px-3 py-1.5 text-xs transition ${
+                                  proWizard.aperture === aperture
+                                    ? "border-white/40 bg-white text-zinc-950"
+                                    : "border-white/10 bg-white/[0.05] text-zinc-100 hover:bg-white/[0.12]"
+                                }`}
+                                onClick={() => handleProApertureSelect(aperture)}
+                              >
+                                {aperture}
+                              </button>
+                            ))}
+                          </div>
+                        </section>
+
+                        <section className="w-full shrink-0 pr-4">
+                          <h3 className="text-sm font-semibold text-zinc-100">5. Выбери свет</h3>
+                          <div data-testid="pro-step-light-grid" className="mt-3 grid gap-2 sm:grid-cols-3 xl:grid-cols-4">
+                            {PRO_LIGHTING_OPTIONS.map((light) => (
+                              <button
+                                key={light.label}
+                                type="button"
+                                className={`rounded-2xl border p-3 text-left transition ${
+                                  proWizard.lighting_style === light.label
+                                    ? "border-white/40 bg-white/[0.11]"
+                                    : "border-white/10 bg-white/[0.03] hover:bg-white/[0.08]"
+                                }`}
+                                onClick={() => handleProLightingSelect(light.label)}
+                              >
+                                <p className="text-sm font-semibold text-zinc-100">{light.label}</p>
+                                <p className="mt-1 text-[11px] text-zinc-400">{light.bestFor}</p>
+                              </button>
+                            ))}
+                          </div>
+                        </section>
+
+                        <section className="w-full shrink-0 pr-4">
+                          <h3 className="text-sm font-semibold text-zinc-100">6. Финал</h3>
+                          <article className="mt-3 rounded-2xl border border-white/10 bg-[#090b10] p-4">
+                            <p className="text-sm font-semibold text-zinc-100">Вы выбрали</p>
+                            <ul className="mt-2 space-y-1 text-xs text-zinc-300">
+                              <li>Камера: {proWizard.camera}</li>
+                              <li>Объектив: {proWizard.lens_profile}</li>
+                              <li>Фокусное: {proWizard.focal_mm} мм</li>
+                              <li>Диафрагма: {proWizard.aperture}</li>
+                              <li>Свет: {proWizard.lighting_style}</li>
+                            </ul>
+                            <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                              <button
+                                type="button"
+                                className="rounded-full border border-white/20 bg-white/[0.06] px-4 py-2 text-xs text-zinc-100"
+                                onClick={() => {
+                                  setProPromptMode("compact");
+                                  setProPromptDrawerOpen(true);
+                                }}
+                              >
+                                Показать промпт
+                              </button>
+                              <button
+                                type="button"
+                                className="rounded-full bg-white px-4 py-2 text-xs font-semibold text-zinc-950"
+                                onClick={() => void handleProDrawerCopy()}
+                              >
+                                Скопировать
+                              </button>
+                              <button
+                                type="button"
+                                className="rounded-full border border-white/20 bg-white/[0.06] px-4 py-2 text-xs text-zinc-100"
+                                onClick={handleProAddToPack}
+                              >
+                                Добавить в пакет
+                              </button>
+                            </div>
+                          </article>
+                        </section>
+                      </div>
+                    </div>
+                  </div>
+
+                  <aside data-testid="pro-current-setup" className="sticky top-6 hidden h-fit rounded-2xl border border-white/10 bg-[#0d0f14] p-4 xl:block">
+                    <p className="text-xs uppercase tracking-[0.16em] text-zinc-500">Текущий сетап</p>
+                    <div className="mt-3 space-y-2 text-xs text-zinc-300">
+                      <p>Камера: {proWizard.camera}</p>
+                      <p>Объектив: {proWizard.lens_profile}</p>
+                      <p>Фокусное: {proWizard.focal_mm} мм</p>
+                      <p>Диафрагма: {proWizard.aperture}</p>
+                      <p>Свет: {proWizard.lighting_style}</p>
+                    </div>
+
+                    <div className="mt-4 grid gap-2">
+                      <button
+                        type="button"
+                        className="rounded-full border border-white/20 bg-white/[0.06] px-4 py-2 text-xs text-zinc-100"
+                        onClick={() => {
+                          setProPromptMode("compact");
+                          setProPromptDrawerOpen(true);
+                        }}
+                      >
+                        Показать промпт
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded-full bg-white px-4 py-2 text-xs font-semibold text-zinc-950"
+                        onClick={() => void handleProDrawerCopy()}
                       >
                         Скопировать промпт
                       </button>
-
                       <button
                         type="button"
-                        data-testid={`details-${preset.id}`}
-                        aria-label={`Открыть детали для задачи ${preset.humanTitle}`}
-                        className="mt-2 w-full rounded-full border border-white/20 bg-white/[0.06] px-4 py-2 text-xs text-zinc-100 transition hover:bg-white/[0.14]"
-                        onClick={() => handleShowPresetDetails(preset)}
+                        className="rounded-full border border-white/20 bg-white/[0.06] px-4 py-2 text-xs text-zinc-100"
+                        onClick={handleProAddToPack}
                       >
-                        Детали
+                        Добавить в пакет
                       </button>
-                    </article>
-                  );
-                })}
-              </div>
-
-              {filteredTaskPresets.length === 0 ? (
-                <p className="mt-4 text-sm text-zinc-400">По этому фильтру пока нет карточек. Попробуйте другую категорию или поиск.</p>
-              ) : null}
+                    </div>
+                  </aside>
+                </div>
+              )}
             </div>
 
-            <section className="rounded-3xl border border-white/10 bg-[#07080a]/95 p-4 backdrop-blur-md md:p-6">
-              <div className="flex items-center justify-between gap-3">
-                <h3 className="font-display text-xl font-semibold tracking-tight">Варианты</h3>
-                <div className="flex flex-wrap items-center gap-2">
-                  {generatedPack ? <p className="text-xs text-zinc-400">{formatDate(generatedPack.created_at)}</p> : null}
-                  <button
-                    type="button"
-                    data-testid="generate-4-variations-btn"
-                    className="rounded-full border border-white/20 bg-white/[0.06] px-4 py-2 text-xs text-zinc-100 transition hover:bg-white/[0.14]"
-                    onClick={() => handleGeneratePack(studioSetup)}
-                  >
-                    4 варианта
-                  </button>
+            {studioMode === "beginner" ? (
+              <section className="rounded-3xl border border-white/10 bg-[#07080a]/95 p-4 backdrop-blur-md md:p-6">
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="font-display text-xl font-semibold tracking-tight">Варианты</h3>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {generatedPack ? <p className="text-xs text-zinc-400">{formatDate(generatedPack.created_at)}</p> : null}
+                    <button
+                      type="button"
+                      data-testid="generate-4-variations-btn"
+                      className="rounded-full border border-white/20 bg-white/[0.06] px-4 py-2 text-xs text-zinc-100 transition hover:bg-white/[0.14]"
+                      onClick={() => handleGeneratePack(studioSetup)}
+                    >
+                      4 варианта
+                    </button>
+                  </div>
                 </div>
-              </div>
-              {generatedPack ? (
-                <div className="mt-3 grid gap-3 md:grid-cols-2">
-                  {generatedPack.variants.map((variant) => (
-                    <article key={variant.id} data-testid="pack-variant-card" className="rounded-2xl border border-white/10 bg-[#0d0e12] p-3">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div>
-                          <p className="text-sm font-semibold">{variant.label}</p>
-                          <p className="text-xs text-zinc-400">{variant.summary}</p>
+                {generatedPack ? (
+                  <div className="mt-3 grid gap-3 md:grid-cols-2">
+                    {generatedPack.variants.map((variant) => (
+                      <article key={variant.id} data-testid="pack-variant-card" className="rounded-2xl border border-white/10 bg-[#0d0e12] p-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div>
+                            <p className="text-sm font-semibold">{variant.label}</p>
+                            <p className="text-xs text-zinc-400">{variant.summary}</p>
+                          </div>
+                          <button
+                            className="rounded-full bg-white/10 px-3 py-1 text-xs text-zinc-200 hover:bg-white/20"
+                            onClick={() => void handleCopyText(variantPrompt(variant))}
+                          >
+                            Скопировать
+                          </button>
                         </div>
-                        <button
-                          className="rounded-full bg-white/10 px-3 py-1 text-xs text-zinc-200 hover:bg-white/20"
-                          onClick={() => void handleCopyText(variantPrompt(variant))}
-                        >
-                          Скопировать
-                        </button>
-                      </div>
-                      <pre className="mt-2 max-h-28 overflow-auto rounded-xl border border-white/10 bg-[#0b0c10] p-2 text-[11px] whitespace-pre-wrap text-zinc-300">
-                        {variantPrompt(variant)}
-                      </pre>
-                    </article>
-                  ))}
-                </div>
-              ) : (
-                <p className="mt-2 text-sm text-zinc-400">Нажми «4 варианта», чтобы получить base + 3 безопасные версии.</p>
-              )}
-            </section>
+                        <pre className="mt-2 max-h-28 overflow-auto rounded-xl border border-white/10 bg-[#0b0c10] p-2 text-[11px] whitespace-pre-wrap text-zinc-300">
+                          {variantPrompt(variant)}
+                        </pre>
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-2 text-sm text-zinc-400">Нажми «4 варианта», чтобы получить base + 3 безопасные версии.</p>
+                )}
+              </section>
+            ) : null}
           </section>
         ) : null}
 
@@ -1141,9 +1649,9 @@ export default function PromptCopilotApp() {
                 type="button"
                 className="rounded-full border border-white/20 bg-white/[0.06] px-4 py-2 text-sm text-zinc-100"
                 onClick={() => {
-                  selectTaskPreset(activeDetailsPreset);
+                  openProFromPreset(activeDetailsPreset);
+                  setActiveTab("studio");
                   setDetailsPresetId(null);
-                  setAdvancedOpen(true);
                 }}
               >
                 Открыть Pro
@@ -1201,9 +1709,9 @@ export default function PromptCopilotApp() {
               data-testid="sheet-open-pro"
               className="rounded-full border border-white/20 bg-white/[0.06] px-3 py-2 text-xs text-zinc-100"
               onClick={() => {
-                selectTaskPreset(activePostCopyPreset);
+                openProFromPreset(activePostCopyPreset);
+                setActiveTab("studio");
                 setPostCopyPanel(null);
-                setAdvancedOpen(true);
               }}
             >
               Открыть Pro
@@ -1262,168 +1770,193 @@ export default function PromptCopilotApp() {
         </aside>
       ) : null}
 
-      {advancedOpen ? (
+      {activeTab === "studio" && studioMode === "pro" ? (
+        <aside className="fixed inset-x-3 bottom-3 z-40 rounded-2xl border border-white/15 bg-[#0d0f14]/95 p-3 shadow-[0_20px_45px_rgba(0,0,0,0.5)] backdrop-blur-xl xl:hidden">
+          <p className="text-[11px] text-zinc-400">Текущий сетап: {proWizard.camera} • {proWizard.lens_profile} • {proWizard.focal_mm} мм</p>
+          <div className="mt-2 grid grid-cols-3 gap-2">
+            <button
+              type="button"
+              className="rounded-full border border-white/20 bg-white/[0.06] px-2 py-2 text-[11px] text-zinc-100"
+              onClick={() => {
+                setProPromptMode("compact");
+                setProPromptDrawerOpen(true);
+              }}
+            >
+              Показать промпт
+            </button>
+            <button
+              type="button"
+              className="rounded-full bg-white px-2 py-2 text-[11px] font-semibold text-zinc-950"
+              onClick={() => void handleProDrawerCopy()}
+            >
+              Скопировать
+            </button>
+            <button
+              type="button"
+              className="rounded-full border border-white/20 bg-white/[0.06] px-2 py-2 text-[11px] text-zinc-100"
+              onClick={handleProAddToPack}
+            >
+              В пакет
+            </button>
+          </div>
+        </aside>
+      ) : null}
+
+      {proPromptDrawerOpen ? (
         <div
-          className="fixed inset-0 z-40 flex items-center justify-center bg-black/75 p-3 md:p-6"
+          className="fixed inset-0 z-50 bg-black/70"
           onClick={(event) => {
             if (event.target === event.currentTarget) {
-              setAdvancedOpen(false);
+              setProPromptDrawerOpen(false);
             }
           }}
         >
-          <section data-testid="advanced-panel" className="max-h-[95vh] w-full max-w-[1280px] overflow-auto rounded-3xl border border-white/15 bg-[#07080a] p-4 md:p-6">
-            <div className="flex flex-wrap items-center justify-between gap-3">
+          <aside
+            ref={proPromptDrawerRef}
+            data-testid="pro-prompt-drawer"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Промпт Pro режима"
+            tabIndex={-1}
+            className="fixed inset-x-3 bottom-3 max-h-[88vh] overflow-auto rounded-2xl border border-white/15 bg-[#0d0f14] p-4 shadow-[0_20px_45px_rgba(0,0,0,0.5)] md:inset-x-auto md:bottom-6 md:right-6 md:top-6 md:w-[460px]"
+          >
+            <div className="flex items-start justify-between gap-3">
               <div>
-                <h3 className="font-display text-2xl font-semibold tracking-tight">Точная настройка</h3>
-                <p className="mt-1 text-sm text-zinc-400">Simple — для быстрого результата, Pro — для точного контроля.</p>
+                <p className="text-sm font-semibold text-zinc-100">Nano Banana Pro</p>
+                <p className="text-xs text-zinc-400">Промпт скрыт на странице и открыт только по запросу.</p>
               </div>
               <button
                 type="button"
-                className="rounded-full border border-white/20 bg-white/[0.06] px-4 py-2 text-xs text-zinc-100"
-                onClick={() => setAdvancedOpen(false)}
+                className="rounded-full border border-white/20 px-3 py-1 text-xs text-zinc-200"
+                onClick={() => setProPromptDrawerOpen(false)}
               >
                 Закрыть
               </button>
             </div>
 
-            <div className="mt-4 inline-flex rounded-full border border-white/10 bg-white/[0.04] p-1">
+            <div className="mt-3 grid gap-2">
+              <label className="text-[11px] text-zinc-400">
+                SCENE GOAL
+                <input
+                  type="text"
+                  value={proWizard.scene.goal}
+                  className="mt-1 w-full rounded-lg border border-white/15 bg-[#090b10] px-2 py-1.5 text-xs text-zinc-100"
+                  onChange={(event) => handleProSceneUpdate("goal", event.target.value)}
+                />
+              </label>
+              <label className="text-[11px] text-zinc-400">
+                SCENE ACTION
+                <input
+                  type="text"
+                  value={proWizard.scene.action}
+                  className="mt-1 w-full rounded-lg border border-white/15 bg-[#090b10] px-2 py-1.5 text-xs text-zinc-100"
+                  onChange={(event) => handleProSceneUpdate("action", event.target.value)}
+                />
+              </label>
+              <label className="text-[11px] text-zinc-400">
+                SCENE ENVIRONMENT
+                <input
+                  type="text"
+                  value={proWizard.scene.environment}
+                  className="mt-1 w-full rounded-lg border border-white/15 bg-[#090b10] px-2 py-1.5 text-xs text-zinc-100"
+                  onChange={(event) => handleProSceneUpdate("environment", event.target.value)}
+                />
+              </label>
+            </div>
+
+            <div className="mt-3 flex items-center gap-2">
               <button
                 type="button"
-                data-testid="advanced-mode-simple"
-                className={`rounded-full px-4 py-2 text-xs transition ${
-                  advancedMode === "simple" ? "bg-white text-zinc-950" : "text-zinc-300 hover:bg-white/[0.08]"
-                }`}
-                onClick={() => setAdvancedMode("simple")}
+                className={`rounded-full px-3 py-1 text-xs ${proPromptMode === "compact" ? "bg-white text-zinc-950" : "bg-white/10 text-zinc-300"}`}
+                onClick={() => setProPromptMode("compact")}
               >
-                Simple
+                Compact
               </button>
               <button
                 type="button"
-                data-testid="advanced-mode-pro"
-                className={`rounded-full px-4 py-2 text-xs transition ${
-                  advancedMode === "pro" ? "bg-white text-zinc-950" : "text-zinc-300 hover:bg-white/[0.08]"
-                }`}
-                onClick={() => setAdvancedMode("pro")}
+                className={`rounded-full px-3 py-1 text-xs ${proPromptMode === "full" ? "bg-white text-zinc-950" : "bg-white/10 text-zinc-300"}`}
+                onClick={() => setProPromptMode("full")}
               >
-                Pro
+                Full
               </button>
             </div>
 
-            {advancedMode === "simple" ? (
-              <div className="mt-4 grid gap-3 md:grid-cols-3">
-                {(Object.keys(selectedPreset.sceneTemplates) as SceneKey[]).map((key) => (
-                  <article key={key} className="rounded-2xl border border-white/10 bg-[#0d0f14] p-3">
-                    <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">
-                      {key === "goal" ? "Цель сцены" : key === "action" ? "Действие сцены" : "Окружение"}
-                    </p>
-                    <select
-                      className="mt-2 w-full rounded-lg border border-white/15 bg-[#0b0d11] px-2 py-2 text-sm text-zinc-100"
-                      value={sceneDraft[key]}
-                      onChange={(event) => updateSceneFromTemplate(key, event.target.value)}
-                    >
-                      {selectedPreset.sceneTemplates[key].map((line) => (
-                        <option key={`${key}-${line}`} value={line}>
-                          {line}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      className="mt-2 rounded-full border border-white/20 bg-white/[0.06] px-3 py-1 text-xs text-zinc-100"
-                      onClick={() => rotateSceneTemplate(key)}
-                    >
-                      Перегенерировать формулировку
-                    </button>
-                  </article>
-                ))}
-              </div>
-            ) : (
-              <div className="mt-4 grid gap-3 md:grid-cols-2">
-                <label className="space-y-1">
-                  <span className="text-xs uppercase tracking-[0.14em] text-zinc-500">Камера</span>
-                  <select
-                    data-testid="pro-camera-select"
-                    className="w-full rounded-lg border border-white/15 bg-[#0b0d11] px-2 py-2 text-sm text-zinc-100"
-                    value={effectiveTech.camera}
-                    onChange={(event) => setTechOverrides((current) => ({ ...current, camera: event.target.value }))}
-                  >
-                    {STUDIO_CAMERA_LIBRARY.map((camera) => (
-                      <option key={camera.name} value={camera.name}>
-                        {camera.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+            <pre className="mt-2 max-h-64 overflow-auto rounded-xl border border-white/10 bg-[#07090d] p-2 text-[11px] leading-relaxed whitespace-pre-wrap text-zinc-300">
+              {proPromptMode === "compact" ? withCompactLines(proPromptPreview.compactPrompt) : proPromptPreview.fullPrompt}
+            </pre>
 
-                <label className="space-y-1">
-                  <span className="text-xs uppercase tracking-[0.14em] text-zinc-500">Объектив</span>
-                  <select
-                    className="w-full rounded-lg border border-white/15 bg-[#0b0d11] px-2 py-2 text-sm text-zinc-100"
-                    value={effectiveTech.lens_profile}
-                    onChange={(event) => setTechOverrides((current) => ({ ...current, lens_profile: event.target.value }))}
-                  >
-                    {lensOptions.map((lens) => (
-                      <option key={lens} value={lens}>
-                        {lens}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                className="rounded-full border border-white/20 bg-white/[0.06] px-3 py-2 text-xs text-zinc-100"
+                onClick={() => void handleCopyText(proPromptPreview.compactPrompt)}
+              >
+                Copy compact
+              </button>
+              <button
+                type="button"
+                className="rounded-full border border-white/20 bg-white/[0.06] px-3 py-2 text-xs text-zinc-100"
+                onClick={() => void handleCopyText(proPromptPreview.fullPrompt)}
+              >
+                Copy full
+              </button>
+              <button
+                type="button"
+                className="rounded-full border border-white/20 bg-white/[0.06] px-3 py-2 text-xs text-zinc-100"
+                onClick={() => handleGeneratePack(proSetup)}
+              >
+                4 варианта
+              </button>
+              <button
+                type="button"
+                className="rounded-full border border-white/20 bg-white/[0.06] px-3 py-2 text-xs text-zinc-100"
+                onClick={() => setProPromptDrawerOpen(false)}
+              >
+                Закрыть
+              </button>
+            </div>
 
-                <label className="space-y-1">
-                  <span className="text-xs uppercase tracking-[0.14em] text-zinc-500">Фокусное</span>
-                  <input
-                    type="range"
-                    min={14}
-                    max={200}
-                    value={effectiveTech.focal_mm}
-                    onChange={(event) => setTechOverrides((current) => ({ ...current, focal_mm: Number(event.target.value) }))}
-                    className="w-full accent-white"
+            <button
+              type="button"
+              className="mt-3 w-full rounded-full border border-white/20 bg-white/[0.06] px-3 py-2 text-xs text-zinc-100"
+              onClick={() => setProAdvancedOpen((current) => !current)}
+            >
+              Advanced toggles
+            </button>
+
+            {proAdvancedOpen ? (
+              <div className="mt-2 rounded-xl border border-white/10 bg-[#080a0f] p-3">
+                <div className="grid grid-cols-2 gap-2 text-xs text-zinc-300">
+                  <label className="inline-flex items-center gap-2">
+                    <input type="checkbox" checked={proWizard.locks.characterLock} onChange={() => handleProLockToggle("characterLock")} />
+                    characterLock
+                  </label>
+                  <label className="inline-flex items-center gap-2">
+                    <input type="checkbox" checked={proWizard.locks.styleLock} onChange={() => handleProLockToggle("styleLock")} />
+                    styleLock
+                  </label>
+                  <label className="inline-flex items-center gap-2">
+                    <input type="checkbox" checked={proWizard.locks.compositionLock} onChange={() => handleProLockToggle("compositionLock")} />
+                    compositionLock
+                  </label>
+                  <label className="inline-flex items-center gap-2">
+                    <input type="checkbox" checked={proWizard.locks.noTextStrict} onChange={() => handleProLockToggle("noTextStrict")} />
+                    noTextStrict
+                  </label>
+                </div>
+
+                <label className="mt-3 block text-[11px] text-zinc-400">
+                  Negative constraints
+                  <textarea
+                    value={proWizard.locks.negativeLock.join(", ")}
+                    rows={3}
+                    className="mt-1 w-full rounded-lg border border-white/15 bg-[#090b10] px-2 py-1.5 text-xs text-zinc-100"
+                    onChange={(event) => handleProNegativeLockChange(event.target.value)}
                   />
-                  <p className="text-xs text-zinc-400">{effectiveTech.focal_mm} мм</p>
-                </label>
-
-                <label className="space-y-1">
-                  <span className="text-xs uppercase tracking-[0.14em] text-zinc-500">Диафрагма</span>
-                  <select
-                    className="w-full rounded-lg border border-white/15 bg-[#0b0d11] px-2 py-2 text-sm text-zinc-100"
-                    value={effectiveTech.aperture}
-                    onChange={(event) => setTechOverrides((current) => ({ ...current, aperture: event.target.value }))}
-                  >
-                    {apertureOptions.map((aperture) => (
-                      <option key={aperture} value={aperture}>
-                        {aperture}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="space-y-1 md:col-span-2">
-                  <span className="text-xs uppercase tracking-[0.14em] text-zinc-500">Свет</span>
-                  <select
-                    className="w-full rounded-lg border border-white/15 bg-[#0b0d11] px-2 py-2 text-sm text-zinc-100"
-                    value={effectiveTech.lighting}
-                    onChange={(event) => setTechOverrides((current) => ({ ...current, lighting: event.target.value }))}
-                  >
-                    {lightOptions.map((light) => (
-                      <option key={light} value={light}>
-                        {light}
-                      </option>
-                    ))}
-                  </select>
                 </label>
               </div>
-            )}
-
-            <article className="mt-4 rounded-2xl border border-white/10 bg-[#0d0f14] p-3">
-              <p className="text-sm font-semibold text-zinc-100">Почему это работает</p>
-              <ul className="mt-2 space-y-1 text-xs text-zinc-400">
-                {selectedPreset.whyWorks.map((line) => (
-                  <li key={line}>• {line}</li>
-                ))}
-              </ul>
-            </article>
-          </section>
+            ) : null}
+          </aside>
         </div>
       ) : null}
 

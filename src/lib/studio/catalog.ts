@@ -126,24 +126,32 @@ const BASE_LOCKS: PresetLocks = {
 
 const DEFAULT_PROMPT_TEMPLATE_COMPACT = [
   "Nano Banana Pro Prompt",
-  "INTENT: {{SCENE_GOAL}}",
-  "SCENE GOAL: {{SCENE_ACTION}}",
-  "CAMERA: {{CAMERA}} | LENS: {{LENS_PROFILE}} {{FOCAL_MM}}mm {{APERTURE}} | LIGHTING: {{LIGHTING}}",
+  "Intent: photoreal cinematic frame with production-safe clarity.",
+  "SCENE GOAL: {{SCENE_GOAL}}",
+  "CAMERA FORMAT: {{CAMERA}}",
+  "LENS/FOCAL/APERTURE: {{LENS_PROFILE}} | {{FOCAL_MM}}mm | {{APERTURE}}",
+  "LIGHTING STYLE: {{LIGHTING}}",
   "LOCKS: character={{LOCK_CHARACTER}}; style={{LOCK_STYLE}}; composition={{LOCK_COMPOSITION}}",
-  "NO TEXT: {{NO_TEXT_POLICY}}",
+  "TEXT POLICY: {{NO_TEXT_POLICY}}",
 ].join("\n");
 
 const DEFAULT_PROMPT_TEMPLATE_FULL = [
   "Nano Banana Pro Prompt",
-  "INTENT: {{SCENE_GOAL}}",
-  "SUBJECT: {{SCENE_ACTION}}",
-  "COMPOSITION: {{LOCK_COMPOSITION}}",
-  "ENVIRONMENT: {{SCENE_ENVIRONMENT}}",
-  "CAMERA EMULATION: {{CAMERA}}, {{LENS_PROFILE}}, {{FOCAL_MM}}mm, {{APERTURE}}",
-  "LIGHTING: {{LIGHTING}}",
-  "LOCKS: character={{LOCK_CHARACTER}}; style={{LOCK_STYLE}}; consistency={{LOCK_COMPOSITION}}",
-  "NEGATIVE CONSTRAINTS: {{NEGATIVE_CONSTRAINTS}}",
+  "Intent: photoreal cinematic frame with production-safe clarity.",
+  "SCENE GOAL: {{SCENE_GOAL}}",
+  "SCENE ACTION: {{SCENE_ACTION}}",
+  "SCENE ENVIRONMENT: {{SCENE_ENVIRONMENT}}",
+  "CAMERA FORMAT: {{CAMERA}}",
+  "LENS TYPE: {{LENS_PROFILE}}",
+  "FOCAL LENGTH: {{FOCAL_MM}}mm",
+  "APERTURE: {{APERTURE}}",
+  "LIGHTING STYLE: {{LIGHTING}}",
+  "CHARACTER LOCK: {{LOCK_CHARACTER}}",
+  "STYLE LOCK: {{LOCK_STYLE}}",
+  "COMPOSITION LOCK: {{LOCK_COMPOSITION}}",
+  "NEGATIVE LOCK: {{NEGATIVE_CONSTRAINTS}}",
   "TEXT POLICY: {{NO_TEXT_POLICY}}",
+  "QUALITY NOTES: avoid artifacts, preserve visual consistency, no text in frame.",
 ].join("\n");
 
 const SCENE_TEMPLATES: Record<GoalTag, SceneTemplateSet> = {
