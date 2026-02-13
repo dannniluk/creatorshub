@@ -1,63 +1,54 @@
 import { expect, test } from "@playwright/test";
 
-test("cinema studio flow: gallery -> studio -> packs", async ({ page }) => {
+test("studio beginner flow: task card -> result panel -> advanced", async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.clear();
   });
 
   await page.goto("/");
 
-  await expect(page.getByTestId("tab-gallery")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Для вас" })).toBeVisible();
-  await expect(page.getByTestId("gallery-sort-select")).toHaveCount(0);
-  await expect(page.getByTestId("gallery-category-filter-all")).toBeVisible();
-  await expect(page.getByText("Connect styles")).toHaveCount(0);
-  await expect(page.getByText("⌘K")).toHaveCount(0);
-  await expect(page.getByTestId("gallery-card")).toHaveCount(8);
-  await page.getByRole("button", { name: "Еще" }).click();
-  await expect(page.getByTestId("gallery-card")).toHaveCount(16);
-
-  await page.getByTestId("gallery-card").first().click();
-
-  await expect(page.getByTestId("gallery-modal")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Kling" })).toHaveCount(0);
-  await page.getByRole("button", { name: "Скопировать промпт" }).click();
-  await expect(page.getByText("Скопировано в буфер обмена")).toBeVisible();
-  await page.getByRole("button", { name: "Применить в Студию" }).click();
-
   await page.getByTestId("tab-studio").click();
   await expect(page.getByRole("heading", { name: "Студия" })).toBeVisible();
-  await expect(page.getByTestId("studio-view-tasks")).toBeVisible();
-  await expect(page.getByTestId("studio-view-cameras")).toBeVisible();
-  await expect(page.getByTestId("studio-task-card")).toHaveCount(9);
-  await page.getByTestId("studio-task-apply-food-macro").click();
-  await expect(page.getByTestId("studio-current-setup")).toContainText("Sony A1");
-  await page.getByTestId("studio-open-prompt-drawer").click();
-  await expect(page.getByTestId("studio-split-view")).toBeVisible();
+
+  await expect(page.getByTestId("studio-task-card").first()).toBeVisible();
+  await expect(page.getByTestId("task-tech-chips-fashion_texture_01")).toBeHidden();
+
+  await page.getByTestId("studio-task-open-fashion_texture_01").click();
+  await expect(page.getByText("Применено: Текстуры одежды")).toBeVisible();
+  await expect(page.getByTestId("result-panel")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Что получится" })).toBeVisible();
+
+  await page.getByTestId("task-show-params-fashion_texture_01").click();
+  await expect(page.getByTestId("task-tech-chips-fashion_texture_01")).toBeVisible();
+
+  const resultPanel = page.getByTestId("result-panel");
+  await expect(resultPanel.getByText("Мягче")).toBeVisible();
+  await expect(resultPanel.getByText("Супер-детали")).toBeVisible();
+  await expect(resultPanel.getByText("Фон читается")).toBeVisible();
+  await expect(resultPanel.getByText("Сильное размытие")).toBeVisible();
+  await expect(resultPanel.getByText("Мягко")).toBeVisible();
+  await expect(resultPanel.getByText("Драма")).toBeVisible();
+
+  await page.getByTestId("copy-prompt-btn").click();
+  await expect(page.getByText("Скопировано в буфер обмена")).toBeVisible();
+
+  await page.getByTestId("generate-4-variations-btn").click();
+  await expect(page.getByTestId("pack-variant-card")).toHaveCount(4);
+
+  await page.getByTestId("open-advanced-btn").click();
+  await expect(page.getByTestId("advanced-panel")).toBeVisible();
+  await page.getByTestId("advanced-mode-simple").click();
+  await expect(page.getByTestId("pro-camera-select")).toHaveCount(0);
+
+  await page.getByTestId("advanced-mode-pro").click();
   await expect(page.getByTestId("pro-camera-select")).toBeVisible();
-  await page.getByTestId("pro-camera-select").selectOption("Canon EOS R5");
-  await expect(page.getByTestId("studio-current-setup")).toContainText("Canon EOS R5");
-  await expect(page.getByTestId("studio-prompt-text")).toBeVisible();
-  await expect(page.getByText("Nano Banana Pro Prompt")).toBeVisible();
-  await page.getByTestId("studio-close-prompt-drawer").click();
-  await expect(page.getByTestId("studio-split-view")).toHaveCount(0);
-  await page.getByTestId("studio-view-cameras").click();
-  await expect(page.getByTestId("studio-camera-card")).toHaveCount(9);
-  await page.getByTestId("studio-camera-apply-red-v-raptor-8k-vv").click();
-  await expect(page.getByTestId("studio-current-setup")).toContainText("RED V-RAPTOR 8K VV");
+  await page.getByTestId("advanced-panel").getByRole("button", { name: "Закрыть" }).click();
 
   await page.getByTestId("tab-packs").click();
-  await page.getByTestId("brand-home-btn").click();
-  await expect(page.getByTestId("tab-gallery")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Наборы промптов" })).toBeVisible();
+  await expect(page.getByTestId("copy-all-pack-btn")).toBeVisible();
 
-  await page.getByTestId("tab-studio").click();
-  await page.getByTestId("generate-pack-btn").click();
-
-  await expect(page.getByTestId("pack-variant-card")).toHaveCount(6);
-  await expect(page.getByText("CAMERA MOVEMENT")).toHaveCount(0);
-
-  await page.getByTestId("tab-packs").click();
-  await expect(page.getByTestId("pack-history-item").first()).toBeVisible();
-  await expect(page.getByRole("button", { name: "Export JSON" }).first()).toBeVisible();
-  await expect(page.getByRole("button", { name: "Export CSV" }).first()).toBeVisible();
+  await expect(page.getByText("Create")).toHaveCount(0);
+  await expect(page.getByText("For You")).toHaveCount(0);
+  await expect(page.getByText("Show advanced")).toHaveCount(0);
 });

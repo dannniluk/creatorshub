@@ -25,6 +25,15 @@ export type GalleryPreset = {
   };
 };
 
+export type StudioSetupMeta = {
+  category: string;
+  goal: string;
+  human_title: string;
+  benefit: string;
+  result_chips: string[];
+  why_works: string[];
+};
+
 export type StudioSetup = {
   preset_id: string | null;
   preset_title: string;
@@ -33,6 +42,7 @@ export type StudioSetup = {
   scene_environment: string;
   core6: Core6Setup;
   locked_core: LockedCore;
+  meta?: StudioSetupMeta;
 };
 
 export type PromptPackVariant = {
