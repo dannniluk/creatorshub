@@ -48,7 +48,8 @@ export type StudioTaskPreset = {
   whyWorks: string[];
   defaults: TechSettings;
   sliderDefaults: SlidersMapping;
-  promptTemplate: string;
+  promptTemplateCompact: string;
+  promptTemplateFull: string;
   locks: PresetLocks;
   sceneTemplates: SceneTemplateSet;
 };
@@ -122,6 +123,28 @@ const BASE_LOCKS: PresetLocks = {
   noTextStrict: true,
   negativeLock: ["no watermark", "no text", "no deformed faces/hands", "no extra fingers", "no artifacts"],
 };
+
+const DEFAULT_PROMPT_TEMPLATE_COMPACT = [
+  "Nano Banana Pro Prompt",
+  "INTENT: {{SCENE_GOAL}}",
+  "SCENE GOAL: {{SCENE_ACTION}}",
+  "CAMERA: {{CAMERA}} | LENS: {{LENS_PROFILE}} {{FOCAL_MM}}mm {{APERTURE}} | LIGHTING: {{LIGHTING}}",
+  "LOCKS: character={{LOCK_CHARACTER}}; style={{LOCK_STYLE}}; composition={{LOCK_COMPOSITION}}",
+  "NO TEXT: {{NO_TEXT_POLICY}}",
+].join("\n");
+
+const DEFAULT_PROMPT_TEMPLATE_FULL = [
+  "Nano Banana Pro Prompt",
+  "INTENT: {{SCENE_GOAL}}",
+  "SUBJECT: {{SCENE_ACTION}}",
+  "COMPOSITION: {{LOCK_COMPOSITION}}",
+  "ENVIRONMENT: {{SCENE_ENVIRONMENT}}",
+  "CAMERA EMULATION: {{CAMERA}}, {{LENS_PROFILE}}, {{FOCAL_MM}}mm, {{APERTURE}}",
+  "LIGHTING: {{LIGHTING}}",
+  "LOCKS: character={{LOCK_CHARACTER}}; style={{LOCK_STYLE}}; consistency={{LOCK_COMPOSITION}}",
+  "NEGATIVE CONSTRAINTS: {{NEGATIVE_CONSTRAINTS}}",
+  "TEXT POLICY: {{NO_TEXT_POLICY}}",
+].join("\n");
 
 const SCENE_TEMPLATES: Record<GoalTag, SceneTemplateSet> = {
   Texture: {
@@ -253,7 +276,8 @@ function createPreset(input: {
     whyWorks: input.whyWorks,
     defaults: input.defaults,
     sliderDefaults: input.sliderDefaults,
-    promptTemplate: "Nano Banana Pro Prompt\nIntent: photoreal cinematic frame with production-safe clarity.",
+    promptTemplateCompact: DEFAULT_PROMPT_TEMPLATE_COMPACT,
+    promptTemplateFull: DEFAULT_PROMPT_TEMPLATE_FULL,
     locks: structuredClone(BASE_LOCKS),
     sceneTemplates: SCENE_TEMPLATES[input.goal],
   };

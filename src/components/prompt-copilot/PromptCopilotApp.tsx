@@ -1,24 +1,23 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { generatePromptPack } from "@/lib/studio/generatePromptPack";
 import { DEFAULT_GALLERY_PRESETS } from "@/lib/studio/presets";
 import {
   BEGINNER_CATEGORIES,
   CATEGORY_LABELS,
+  type CreatorCategory,
   GOAL_LABELS,
   STUDIO_CAMERA_LIBRARY,
   STUDIO_LIGHT_SETUPS,
   STUDIO_TASK_PRESETS,
   STUDIO_TERM_GUIDE,
   type GoalTag,
-  type SlidersMapping,
   type StudioTaskPreset,
   type TechSettings,
 } from "@/lib/studio/catalog";
 import { studioPresetCollectionSchema } from "@/lib/studio/presetSchema";
-import { mapSlidersToTech, sliderLevelLabel } from "@/lib/studio/sliderMapping";
 import type { Core6Setup, GalleryPreset, PromptPack, PromptPackVariant, StudioSetup } from "@/lib/studio/types";
 
 type TabKey = "gallery" | "studio" | "packs" | "reference";
@@ -31,14 +30,27 @@ type SceneDraft = {
   environment: string;
 };
 
+type PromptMode = "compact" | "full";
+
+type PostCopyPanelState = {
+  presetId: string;
+  showPrompt: boolean;
+  promptMode: PromptMode;
+};
+
 const VALIDATED_TASK_PRESETS = studioPresetCollectionSchema.parse(STUDIO_TASK_PRESETS);
 
 const STORAGE_KEYS = {
   tab: "prompt-copilot/cinema/tab",
   packs: "prompt-copilot/cinema/packs",
+  onboardingDismissed: "prompt-copilot/cinema/onboarding-dismissed",
 };
 
 const GALLERY_CHUNK_SIZE = 8;
+const COMPACT_PREVIEW_LINES = 6;
+const REQUIRED_NEGATIVE_CONSTRAINTS = ["no watermark", "no text", "no deformed faces/hands", "no extra fingers", "no artifacts"];
+const FOCUSABLE_SELECTOR =
+  'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 const LOCKED_CORE_DEFAULTS = {
   character_lock: "Один и тот же главный герой во всех вариантах, стабильная внешность и возраст.",
@@ -150,9 +162,11 @@ function makeInitialSceneDraft(preset: StudioTaskPreset): SceneDraft {
 function makeSetup(input: {
   preset: StudioTaskPreset;
   scene: SceneDraft;
-  sliders: SlidersMapping;
   tech: TechSettings;
 }): StudioSetup {
+  const presetNegative = input.preset.locks.negativeLock.map((item) => item.trim()).filter(Boolean);
+  const mergedNegative = Array.from(new Set([...REQUIRED_NEGATIVE_CONSTRAINTS, ...presetNegative]));
+
   return {
     preset_id: input.preset.id,
     preset_title: input.preset.humanTitle,
@@ -169,8 +183,8 @@ function makeSetup(input: {
     },
     locked_core: {
       ...LOCKED_CORE_DEFAULTS,
-      negative_lock: input.preset.locks.negativeLock.join(", "),
-      text_policy: input.preset.locks.noTextStrict ? "NO-TEXT STRICT" : "TEXT-ALLOWED",
+      negative_lock: mergedNegative.join(", "),
+      text_policy: "NO-TEXT STRICT",
     },
     meta: {
       category: input.preset.category,
@@ -193,24 +207,111 @@ function setupToTech(core6: Core6Setup): TechSettings {
   };
 }
 
-function levelToResult(level: ReturnType<typeof sliderLevelLabel>, type: "detail" | "blur"): string {
-  if (type === "detail") {
-    if (level === "Низко") {
-      return "мягче";
-    }
-    if (level === "Средне") {
-      return "сбалансированная читаемость";
-    }
-    return "высокая читаемость";
-  }
+function renderPromptTemplate(template: string, tokens: Record<string, string>): string {
+  return template.replaceAll(/\{\{([A-Z_]+)\}\}/g, (_, key: string) => tokens[key] ?? "");
+}
 
-  if (level === "Низко") {
-    return "фон читается";
-  }
-  if (level === "Средне") {
-    return "умеренное размытие";
-  }
-  return "сильное размытие";
+function withCompactLines(text: string, lines = COMPACT_PREVIEW_LINES): string {
+  return text.split("\n").slice(0, lines).join("\n");
+}
+
+function buildPresetPromptPreview(input: { preset: StudioTaskPreset; setup: StudioSetup }): { compact: string; full: string } {
+  const { preset, setup } = input;
+  const noTextPolicy = "NO-TEXT STRICT";
+  const tokens: Record<string, string> = {
+    SCENE_GOAL: setup.scene_goal,
+    SCENE_ACTION: setup.scene_action,
+    SCENE_ENVIRONMENT: setup.scene_environment,
+    CAMERA: setup.core6.camera_format,
+    LENS_PROFILE: setup.core6.lens_type,
+    FOCAL_MM: String(setup.core6.focal_length_mm),
+    APERTURE: setup.core6.aperture,
+    LIGHTING: setup.core6.lighting_style,
+    LOCK_CHARACTER: preset.locks.characterLock ? setup.locked_core.character_lock : "off",
+    LOCK_STYLE: preset.locks.styleLock ? setup.locked_core.style_lock : "off",
+    LOCK_COMPOSITION: preset.locks.compositionLock ? setup.locked_core.composition_lock : "off",
+    NEGATIVE_CONSTRAINTS: setup.locked_core.negative_lock,
+    NO_TEXT_POLICY: noTextPolicy,
+  };
+
+  return {
+    compact: renderPromptTemplate(preset.promptTemplateCompact, tokens),
+    full: renderPromptTemplate(preset.promptTemplateFull, tokens),
+  };
+}
+
+function getFocusable(container: HTMLElement): HTMLElement[] {
+  return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter((item) => {
+    if (item.hasAttribute("disabled")) {
+      return false;
+    }
+
+    return item.getAttribute("aria-hidden") !== "true";
+  });
+}
+
+function useFocusTrap(options: {
+  active: boolean;
+  containerRef: { current: HTMLElement | null };
+  onEscape?: () => void;
+}): void {
+  const { active, containerRef, onEscape } = options;
+
+  useEffect(() => {
+    if (!active) {
+      return;
+    }
+
+    const container = containerRef.current;
+    if (!container) {
+      return;
+    }
+
+    const previousFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const focusables = getFocusable(container);
+    (focusables[0] ?? container).focus();
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onEscape?.();
+        return;
+      }
+
+      if (event.key !== "Tab") {
+        return;
+      }
+
+      const currentFocusables = getFocusable(container);
+      if (currentFocusables.length === 0) {
+        event.preventDefault();
+        container.focus();
+        return;
+      }
+
+      const first = currentFocusables[0]!;
+      const last = currentFocusables[currentFocusables.length - 1]!;
+      const activeElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+
+      if (event.shiftKey) {
+        if (!activeElement || activeElement === first || !container.contains(activeElement)) {
+          event.preventDefault();
+          last.focus();
+        }
+        return;
+      }
+
+      if (!activeElement || activeElement === last || !container.contains(activeElement)) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      previousFocused?.focus();
+    };
+  }, [active, containerRef, onEscape]);
 }
 
 export default function PromptCopilotApp() {
@@ -228,14 +329,25 @@ export default function PromptCopilotApp() {
   const [galleryCategory, setGalleryCategory] = useState("Все");
   const [visiblePresetCount, setVisiblePresetCount] = useState(GALLERY_CHUNK_SIZE);
 
+  const [studioQuery, setStudioQuery] = useState("");
+  const [studioCategoryFilter, setStudioCategoryFilter] = useState<"Все" | CreatorCategory>("Все");
   const [selectedPresetId, setSelectedPresetId] = useState(starterPreset.id);
-  const [sliders, setSliders] = useState<SlidersMapping>({ ...starterPreset.sliderDefaults });
   const [sceneDraft, setSceneDraft] = useState<SceneDraft>(() => makeInitialSceneDraft(starterPreset));
   const [techOverrides, setTechOverrides] = useState<Partial<TechSettings>>({});
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [advancedMode, setAdvancedMode] = useState<AdvancedMode>("simple");
-  const [promptExpanded, setPromptExpanded] = useState(false);
-  const [expandedTechChips, setExpandedTechChips] = useState<Record<string, boolean>>({});
+  const [detailsPresetId, setDetailsPresetId] = useState<string | null>(null);
+  const [detailsPromptMode, setDetailsPromptMode] = useState<PromptMode>("compact");
+  const [postCopyPanel, setPostCopyPanel] = useState<PostCopyPanelState | null>(null);
+  const [showOnboardingTip, setShowOnboardingTip] = useState(() => {
+    if (typeof window === "undefined") {
+      return false;
+    }
+
+    return localStorage.getItem(STORAGE_KEYS.onboardingDismissed) !== "1";
+  });
+  const detailsPanelRef = useRef<HTMLDivElement | null>(null);
+  const postCopyPanelRef = useRef<HTMLDivElement | null>(null);
 
   const [packs, setPacks] = useState<PromptPack[]>(() => {
     if (typeof window === "undefined") {
@@ -259,36 +371,33 @@ export default function PromptCopilotApp() {
 
   const selectedPreset = useMemo(() => getPresetById(selectedPresetId), [selectedPresetId]);
 
-  const mappedTech = useMemo(() => {
-    return mapSlidersToTech({
-      base: selectedPreset.defaults,
-      category: selectedPreset.category,
-      goal: selectedPreset.goal,
-      sliders,
-    });
-  }, [selectedPreset, sliders]);
-
   const effectiveTech = useMemo(() => {
     return {
-      ...mappedTech,
+      ...selectedPreset.defaults,
       ...techOverrides,
     };
-  }, [mappedTech, techOverrides]);
+  }, [selectedPreset.defaults, techOverrides]);
 
   const studioSetup = useMemo(() => {
     return makeSetup({
       preset: selectedPreset,
-      sliders,
       scene: sceneDraft,
       tech: effectiveTech,
     });
-  }, [effectiveTech, sceneDraft, selectedPreset, sliders]);
+  }, [effectiveTech, sceneDraft, selectedPreset]);
 
-  const livePreview = useMemo(() => {
-    return generatePromptPack({ setup: studioSetup, packId: "preview", createdAt: "2026-02-13T00:00:00.000Z" });
-  }, [studioSetup]);
-
-  const promptPreview = livePreview.variants[0] ? variantPrompt(livePreview.variants[0]) : "";
+  const safeDefaultByCategory = useMemo(() => {
+    const result: Partial<Record<CreatorCategory, string>> = {};
+    for (const preset of VALIDATED_TASK_PRESETS) {
+      if (!preset.safeDefault) {
+        continue;
+      }
+      if (!result[preset.category]) {
+        result[preset.category] = preset.id;
+      }
+    }
+    return result;
+  }, []);
 
   const activePack = useMemo(() => {
     if (!activePackId) {
@@ -319,6 +428,9 @@ export default function PromptCopilotApp() {
 
   const apertureOptions = ["f/2.0", "f/2.8", "f/4", "f/5.6", "f/8"] as const;
 
+  const activeDetailsPreset = detailsPresetId ? getPresetById(detailsPresetId) : null;
+  const activePostCopyPreset = postCopyPanel?.presetId ? getPresetById(postCopyPanel.presetId) : null;
+
   const filteredGalleryPresets = useMemo(() => {
     const query = galleryQuery.trim().toLowerCase();
 
@@ -347,38 +459,56 @@ export default function PromptCopilotApp() {
   );
 
   const filteredTaskPresets = useMemo(() => {
-    const query = galleryQuery.trim().toLowerCase();
-    if (!query) {
-      return VALIDATED_TASK_PRESETS;
-    }
-
     return VALIDATED_TASK_PRESETS.filter((preset) => {
-      const searchable = [
-        preset.humanTitle,
-        preset.benefit,
-        preset.category,
-        preset.goal,
-        ...preset.resultChips,
-        preset.defaults.camera,
-        preset.defaults.lens_profile,
-        preset.defaults.lighting,
-      ]
+      if (studioCategoryFilter !== "Все" && preset.category !== studioCategoryFilter) {
+        return false;
+      }
+
+      const query = studioQuery.trim().toLowerCase();
+      if (!query) {
+        return true;
+      }
+
+      const searchable = [preset.humanTitle, preset.benefit, CATEGORY_LABELS[preset.category], GOAL_LABELS[preset.goal], ...preset.resultChips]
         .join(" ")
         .toLowerCase();
+
       return searchable.includes(query);
     });
-  }, [galleryQuery]);
-
-  const currentResultSummary = useMemo(() => {
-    const detailLevel = sliderLevelLabel(sliders.detail);
-    return `Текущий результат: ${selectedPreset.resultChips[0]} • ${detailLevel.toLowerCase()} detail • ${effectiveTech.lighting}`;
-  }, [effectiveTech.lighting, selectedPreset.resultChips, sliders.detail]);
-
-  const detailLevel = sliderLevelLabel(sliders.detail);
-  const blurLevel = sliderLevelLabel(sliders.backgroundBlur);
-  const lightLevel = sliderLevelLabel(sliders.lightDrama);
+  }, [studioCategoryFilter, studioQuery]);
 
   const activeTerm = STUDIO_TERM_GUIDE.find((item) => item.id === activeTermId) ?? null;
+
+  const buildSetupForPreset = (preset: StudioTaskPreset): StudioSetup => {
+    const isSelected = preset.id === selectedPreset.id;
+    const scene = isSelected ? sceneDraft : makeInitialSceneDraft(preset);
+    const tech = isSelected ? effectiveTech : preset.defaults;
+    return makeSetup({
+      preset,
+      scene,
+      tech,
+    });
+  };
+
+  const activeDetailsPreview = activeDetailsPreset
+    ? buildPresetPromptPreview({ preset: activeDetailsPreset, setup: buildSetupForPreset(activeDetailsPreset) })
+    : null;
+
+  const activePostCopyPreview = activePostCopyPreset
+    ? buildPresetPromptPreview({ preset: activePostCopyPreset, setup: buildSetupForPreset(activePostCopyPreset) })
+    : null;
+
+  useFocusTrap({
+    active: Boolean(activeDetailsPreset),
+    containerRef: detailsPanelRef,
+    onEscape: () => setDetailsPresetId(null),
+  });
+
+  useFocusTrap({
+    active: Boolean(postCopyPanel),
+    containerRef: postCopyPanelRef,
+    onEscape: () => setPostCopyPanel(null),
+  });
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.tab, JSON.stringify(activeTab));
@@ -387,10 +517,6 @@ export default function PromptCopilotApp() {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.packs, JSON.stringify(packs));
   }, [packs]);
-
-  useEffect(() => {
-    setVisiblePresetCount(GALLERY_CHUNK_SIZE);
-  }, [galleryCategory, galleryQuery]);
 
   useEffect(() => {
     if (!toast) {
@@ -407,40 +533,48 @@ export default function PromptCopilotApp() {
   }, [toast]);
 
   const resetSelectionToPresetDefaults = (preset: StudioTaskPreset) => {
-    setSliders({ ...preset.sliderDefaults });
     setSceneDraft(makeInitialSceneDraft(preset));
     setTechOverrides({});
   };
 
-  const applyTaskPreset = (preset: StudioTaskPreset) => {
+  const selectTaskPreset = (preset: StudioTaskPreset) => {
     setSelectedPresetId(preset.id);
     resetSelectionToPresetDefaults(preset);
-    setToast({ kind: "success", text: `Применено: ${preset.humanTitle}` });
   };
 
-  const handleSliderChange = (key: keyof SlidersMapping, rawValue: string) => {
-    const value = Number(rawValue);
-    setSliders((current) => ({
-      ...current,
-      [key]: Math.max(0, Math.min(100, Math.round(value))),
-    }));
-  };
-
-  const handleCopyText = async (text: string) => {
+  const handleCopyText = async (text: string, successText = "Скопировано ✅") => {
     try {
       await navigator.clipboard.writeText(text);
-      setToast({ kind: "success", text: "Скопировано в буфер обмена" });
+      setToast({ kind: "success", text: successText });
     } catch {
       setToast({ kind: "error", text: "Не удалось скопировать текст" });
     }
   };
 
-  const handleGeneratePack = () => {
-    const pack = generatePromptPack({ setup: studioSetup });
+  const handleGeneratePack = (setup = studioSetup) => {
+    const pack = generatePromptPack({ setup });
     setGeneratedPack(pack);
     setPacks((current) => [pack, ...current].slice(0, 60));
     setActivePackId(pack.id);
     setToast({ kind: "success", text: "Собрано 4 варианта" });
+  };
+
+  const handleCopyPresetCompact = async (preset: StudioTaskPreset) => {
+    selectTaskPreset(preset);
+    const setup = buildSetupForPreset(preset);
+    const preview = buildPresetPromptPreview({ preset, setup });
+    await handleCopyText(preview.compact);
+    setPostCopyPanel({
+      presetId: preset.id,
+      showPrompt: false,
+      promptMode: "compact",
+    });
+  };
+
+  const handleShowPresetDetails = (preset: StudioTaskPreset) => {
+    selectTaskPreset(preset);
+    setDetailsPresetId(preset.id);
+    setDetailsPromptMode("compact");
   };
 
   const handleCopyAllPack = async () => {
@@ -514,13 +648,6 @@ export default function PromptCopilotApp() {
     setToast({ kind: "success", text: `Применено из справочника: ${term.term}` });
   };
 
-  const toggleTechChips = (id: string) => {
-    setExpandedTechChips((current) => ({
-      ...current,
-      [id]: !current[id],
-    }));
-  };
-
   const tabClass = (tab: TabKey): string =>
     `rounded-full px-5 py-2 text-[15px] font-medium transition ${
       activeTab === tab ? "bg-white text-[#0f0f12]" : "bg-white/[0.06] text-zinc-300 hover:bg-white/[0.12]"
@@ -559,7 +686,10 @@ export default function PromptCopilotApp() {
                   className="w-full bg-transparent text-[15px] text-zinc-200 outline-none placeholder:text-zinc-500"
                   placeholder="Поиск по сценам, стилям, задачам"
                   value={galleryQuery}
-                  onChange={(event) => setGalleryQuery(event.target.value)}
+                  onChange={(event) => {
+                    setGalleryQuery(event.target.value);
+                    setVisiblePresetCount(GALLERY_CHUNK_SIZE);
+                  }}
                 />
               </div>
             </div>
@@ -596,7 +726,10 @@ export default function PromptCopilotApp() {
                       ? "border-white/40 bg-white text-zinc-950"
                       : "border-white/15 bg-white/[0.04] text-zinc-300 hover:bg-white/[0.1]"
                   }`}
-                  onClick={() => setGalleryCategory(category)}
+                  onClick={() => {
+                    setGalleryCategory(category);
+                    setVisiblePresetCount(GALLERY_CHUNK_SIZE);
+                  }}
                 >
                   {category}
                 </button>
@@ -644,255 +777,137 @@ export default function PromptCopilotApp() {
             <div className="rounded-3xl border border-white/10 bg-[#07080a]/95 p-4 backdrop-blur-md md:p-6">
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <h2 className="font-display text-3xl font-semibold tracking-tight">Студия</h2>
-                  <p className="mt-1 text-sm text-zinc-400">Открой задачу, подстрой вид и собери production-safe промпт за 20–30 секунд.</p>
+                  <h2 className="font-display text-3xl font-semibold tracking-tight">Студия для новичков</h2>
+                  <p className="mt-1 text-sm text-zinc-400">Выбери задачу, нажми «Скопировать промпт» и сразу работай в модели.</p>
                 </div>
-                <span className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-xs font-medium text-emerald-200">
-                  Beginner Mode
+                <span className="rounded-full border border-sky-400/30 bg-sky-400/10 px-3 py-1 text-xs font-medium text-sky-200">
+                  Минималистичный режим
                 </span>
               </div>
 
+              {showOnboardingTip ? (
+                <div className="mb-4 rounded-2xl border border-white/10 bg-[#101217] p-3 text-xs text-zinc-300">
+                  <p>Подсказка: копирование с карточки сразу дает компактный production-safe промпт.</p>
+                  <button
+                    type="button"
+                    className="mt-2 rounded-full border border-white/20 bg-white/[0.06] px-3 py-1 text-[11px] text-zinc-100"
+                    onClick={() => {
+                      setShowOnboardingTip(false);
+                      localStorage.setItem(STORAGE_KEYS.onboardingDismissed, "1");
+                    }}
+                  >
+                    Не показывать снова
+                  </button>
+                </div>
+              ) : null}
+
               <div className="mb-4 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className={`rounded-full border px-3 py-1 text-xs transition ${
+                    studioCategoryFilter === "Все"
+                      ? "border-white/40 bg-white text-zinc-950"
+                      : "border-white/10 bg-white/[0.04] text-zinc-300 hover:bg-white/[0.12]"
+                  }`}
+                  onClick={() => setStudioCategoryFilter("Все")}
+                >
+                  Все
+                </button>
                 {BEGINNER_CATEGORIES.map((category) => (
-                  <span key={category} className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-zinc-300">
+                  <button
+                    key={category}
+                    type="button"
+                    className={`rounded-full border px-3 py-1 text-xs transition ${
+                      studioCategoryFilter === category
+                        ? "border-white/40 bg-white text-zinc-950"
+                        : "border-white/10 bg-white/[0.04] text-zinc-300 hover:bg-white/[0.12]"
+                    }`}
+                    onClick={() => setStudioCategoryFilter(category)}
+                  >
                     {CATEGORY_LABELS[category]}
-                  </span>
+                  </button>
                 ))}
               </div>
 
-              <div className="grid gap-4 xl:grid-cols-[1.28fr_0.92fr]">
-                <div>
-                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                    {filteredTaskPresets.map((preset) => {
-                      const isOpen = Boolean(expandedTechChips[preset.id]);
-                      return (
-                        <article key={preset.id} data-testid="studio-task-card" className="rounded-2xl border border-white/10 bg-[#0d0f14] p-3">
-                          <div className="flex items-start justify-between gap-2">
-                            <p className="font-display text-lg text-zinc-100">{preset.humanTitle}</p>
-                            <div className="flex gap-1">
-                              {preset.recommended ? (
-                                <span className="rounded-full bg-emerald-400/15 px-2 py-0.5 text-[10px] text-emerald-200">Recommended</span>
-                              ) : null}
-                              {preset.safeDefault ? (
-                                <span className="rounded-full bg-sky-400/15 px-2 py-0.5 text-[10px] text-sky-200">Safe default</span>
-                              ) : null}
-                            </div>
-                          </div>
-                          <p className="mt-1 text-xs text-zinc-400">{preset.benefit}</p>
-                          <div className="mt-2 flex flex-wrap gap-1.5">
-                            {preset.resultChips.map((chip) => (
-                              <span key={`${preset.id}-${chip}`} className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] text-zinc-300">
-                                {chip}
-                              </span>
-                            ))}
-                          </div>
-                          <button
-                            type="button"
-                            data-testid={`studio-task-open-${preset.id}`}
-                            className="mt-3 w-full rounded-full border border-white/20 bg-white/[0.06] px-3 py-2 text-xs text-zinc-100 transition hover:bg-white/[0.16]"
-                            onClick={() => applyTaskPreset(preset)}
+              <label className="mb-4 block">
+                <span className="mb-2 block text-xs uppercase tracking-[0.16em] text-zinc-500">Поиск задач</span>
+                <input
+                  type="search"
+                  className="w-full rounded-2xl border border-white/10 bg-[#0d0f14] px-4 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-white/25"
+                  placeholder="Например: портрет, каталожка, фактура"
+                  value={studioQuery}
+                  onChange={(event) => setStudioQuery(event.target.value)}
+                />
+              </label>
+
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {filteredTaskPresets.map((preset) => {
+                  const isSafeDefault = safeDefaultByCategory[preset.category] === preset.id;
+                  return (
+                    <article key={preset.id} data-testid="studio-task-card" className="rounded-2xl border border-white/10 bg-[#0d0f14] p-4">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="font-display text-2xl leading-tight text-zinc-100">{preset.humanTitle}</p>
+                        {isSafeDefault ? (
+                          <span className="rounded-full border border-sky-300/35 bg-sky-300/10 px-2 py-1 text-[10px] text-sky-200">Безопасный старт</span>
+                        ) : null}
+                      </div>
+
+                      <p className="mt-2 truncate text-sm text-zinc-400">{preset.benefit}</p>
+
+                      <div className="mt-3 flex flex-wrap gap-1.5">
+                        {preset.resultChips.slice(0, 4).map((chip) => (
+                          <span
+                            key={`${preset.id}-${chip}`}
+                            className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] text-zinc-300"
                           >
-                            Открыть
-                          </button>
-                          <button
-                            type="button"
-                            data-testid={`task-show-params-${preset.id}`}
-                            className="mt-2 text-xs text-zinc-400 underline-offset-2 transition hover:text-zinc-200 hover:underline"
-                            onClick={() => toggleTechChips(preset.id)}
-                          >
-                            Показать параметры
-                          </button>
-                          <div
-                            data-testid={`task-tech-chips-${preset.id}`}
-                            hidden={!isOpen}
-                            className="mt-2 flex flex-wrap gap-1.5"
-                          >
-                            <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] text-zinc-300">
-                              {preset.defaults.camera}
-                            </span>
-                            <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] text-zinc-300">
-                              {preset.defaults.lens_profile}
-                            </span>
-                            <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] text-zinc-300">
-                              {preset.defaults.focal_mm} мм
-                            </span>
-                            <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] text-zinc-300">
-                              {preset.defaults.aperture}
-                            </span>
-                            <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] text-zinc-300">
-                              {preset.defaults.lighting}
-                            </span>
-                          </div>
-                        </article>
-                      );
-                    })}
-                  </div>
-                </div>
+                            {chip}
+                          </span>
+                        ))}
+                      </div>
 
-                <aside data-testid="result-panel" className="sticky top-6 h-fit rounded-2xl border border-white/12 bg-[#0c0d11] p-4">
-                  <h3 className="font-display text-2xl font-semibold tracking-tight">Что получится</h3>
-                  <ul data-testid="result-bullets" className="mt-2 space-y-1 text-sm text-zinc-300">
-                    <li>Фактура: {levelToResult(detailLevel, "detail")}</li>
-                    <li>Фон: {levelToResult(blurLevel, "blur")}</li>
-                    <li>Свет: {effectiveTech.lighting}</li>
-                  </ul>
-
-                  <div className="mt-4 rounded-xl border border-white/10 bg-[#101217] p-3">
-                    <p className="text-xs uppercase tracking-[0.15em] text-zinc-500">Подстрой вид</p>
-                    <div className="mt-3 space-y-3">
-                      <label className="block">
-                        <div className="mb-1 flex items-center justify-between text-xs text-zinc-300">
-                          <span>Детали</span>
-                          <span>{detailLevel}</span>
-                        </div>
-                        <div className="flex items-center justify-between text-[11px] text-zinc-500">
-                          <span>Мягче</span>
-                          <span>Супер-детали</span>
-                        </div>
-                        <input
-                          data-testid="slider-detail"
-                          type="range"
-                          min={0}
-                          max={100}
-                          value={sliders.detail}
-                          onChange={(event) => handleSliderChange("detail", event.target.value)}
-                          className="mt-1 w-full accent-white"
-                        />
-                      </label>
-
-                      <label className="block">
-                        <div className="mb-1 flex items-center justify-between text-xs text-zinc-300">
-                          <span>Отделение от фона</span>
-                          <span>{blurLevel}</span>
-                        </div>
-                        <div className="flex items-center justify-between text-[11px] text-zinc-500">
-                          <span>Фон читается</span>
-                          <span>Сильное размытие</span>
-                        </div>
-                        <input
-                          data-testid="slider-background-blur"
-                          type="range"
-                          min={0}
-                          max={100}
-                          value={sliders.backgroundBlur}
-                          onChange={(event) => handleSliderChange("backgroundBlur", event.target.value)}
-                          className="mt-1 w-full accent-white"
-                        />
-                      </label>
-
-                      <label className="block">
-                        <div className="mb-1 flex items-center justify-between text-xs text-zinc-300">
-                          <span>Контраст света</span>
-                          <span>{lightLevel}</span>
-                        </div>
-                        <div className="flex items-center justify-between text-[11px] text-zinc-500">
-                          <span>Мягко</span>
-                          <span>Драма</span>
-                        </div>
-                        <input
-                          data-testid="slider-light-drama"
-                          type="range"
-                          min={0}
-                          max={100}
-                          value={sliders.lightDrama}
-                          onChange={(event) => handleSliderChange("lightDrama", event.target.value)}
-                          className="mt-1 w-full accent-white"
-                        />
-                      </label>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 rounded-xl border border-white/10 bg-[#101217] p-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-xs uppercase tracking-[0.15em] text-zinc-500">Preview prompt</p>
-                      <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] text-zinc-300">Nano Banana Pro</span>
-                    </div>
-                    <pre className="mt-2 max-h-44 overflow-auto rounded-lg border border-white/10 bg-[#0b0c10] p-2 text-[11px] leading-relaxed text-zinc-300 whitespace-pre-wrap">
-                      {promptExpanded ? promptPreview : promptPreview.split("\n").slice(0, 7).join("\n")}
-                    </pre>
-                    <button
-                      type="button"
-                      className="mt-2 text-xs text-zinc-400 underline-offset-2 transition hover:text-zinc-200 hover:underline"
-                      onClick={() => setPromptExpanded((value) => !value)}
-                    >
-                      {promptExpanded ? "Свернуть" : "Показать полностью"}
-                    </button>
-                  </div>
-
-                  <div className="mt-4 grid gap-2">
-                    <button
-                      type="button"
-                      data-testid="copy-prompt-btn"
-                      className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-zinc-950 transition hover:bg-zinc-200"
-                      onClick={() => void handleCopyText(promptPreview)}
-                    >
-                      Copy prompt
-                    </button>
-                    <button
-                      type="button"
-                      data-testid="generate-4-variations-btn"
-                      className="rounded-full border border-white/20 bg-white/[0.06] px-4 py-2 text-sm text-zinc-100 transition hover:bg-white/[0.14]"
-                      onClick={handleGeneratePack}
-                    >
-                      4 варианта
-                    </button>
-                    <button
-                      type="button"
-                      data-testid="open-advanced-btn"
-                      className="rounded-full border border-white/20 bg-white/[0.06] px-4 py-2 text-sm text-zinc-100 transition hover:bg-white/[0.14]"
-                      onClick={() => setAdvancedOpen(true)}
-                    >
-                      Точная настройка
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded-full border border-white/20 bg-white/[0.06] px-4 py-2 text-sm text-zinc-100 transition hover:bg-white/[0.14]"
-                      onClick={handleGeneratePack}
-                    >
-                      Собрать Prompt Pack (4)
-                    </button>
-                  </div>
-
-                  <div className="mt-4 rounded-xl border border-white/10 bg-[#101217] p-3">
-                    <p className="text-xs text-zinc-400">{currentResultSummary}</p>
-                    <p data-testid="current-setup-line" className="mt-1 text-xs text-zinc-300">
-                      {effectiveTech.camera} • {effectiveTech.lens_profile} • {effectiveTech.focal_mm} мм • {effectiveTech.aperture} • {effectiveTech.lighting}
-                    </p>
-                    <div className="mt-2 flex flex-wrap gap-2">
                       <button
                         type="button"
-                        className="rounded-full border border-white/20 bg-white/[0.05] px-3 py-1 text-xs text-zinc-200"
-                        onClick={() => setAdvancedOpen(true)}
+                        data-testid={`copy-prompt-${preset.id}`}
+                        aria-label={`Скопировать промпт для задачи ${preset.humanTitle}`}
+                        className="mt-4 w-full rounded-full bg-white px-4 py-2 text-sm font-semibold text-zinc-950 transition hover:bg-zinc-200"
+                        onClick={() => void handleCopyPresetCompact(preset)}
                       >
-                        Редактировать
+                        Скопировать промпт
                       </button>
+
                       <button
                         type="button"
-                        className="rounded-full border border-white/20 bg-white/[0.05] px-3 py-1 text-xs text-zinc-200"
-                        onClick={() => {
-                          resetSelectionToPresetDefaults(selectedPreset);
-                          setToast({ kind: "success", text: "Сетап сброшен" });
-                        }}
+                        data-testid={`details-${preset.id}`}
+                        aria-label={`Открыть детали для задачи ${preset.humanTitle}`}
+                        className="mt-2 w-full rounded-full border border-white/20 bg-white/[0.06] px-4 py-2 text-xs text-zinc-100 transition hover:bg-white/[0.14]"
+                        onClick={() => handleShowPresetDetails(preset)}
                       >
-                        Сбросить
+                        Детали
                       </button>
-                      <button
-                        type="button"
-                        className="rounded-full border border-white/20 bg-white/[0.05] px-3 py-1 text-xs text-zinc-200"
-                        onClick={() => setToast({ kind: "success", text: "Пресет сохранен" })}
-                      >
-                        Сохранить пресет
-                      </button>
-                    </div>
-                  </div>
-                </aside>
+                    </article>
+                  );
+                })}
               </div>
+
+              {filteredTaskPresets.length === 0 ? (
+                <p className="mt-4 text-sm text-zinc-400">По этому фильтру пока нет карточек. Попробуйте другую категорию или поиск.</p>
+              ) : null}
             </div>
 
             <section className="rounded-3xl border border-white/10 bg-[#07080a]/95 p-4 backdrop-blur-md md:p-6">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-3">
                 <h3 className="font-display text-xl font-semibold tracking-tight">Варианты</h3>
-                {generatedPack ? <p className="text-xs text-zinc-400">{formatDate(generatedPack.created_at)}</p> : null}
+                <div className="flex flex-wrap items-center gap-2">
+                  {generatedPack ? <p className="text-xs text-zinc-400">{formatDate(generatedPack.created_at)}</p> : null}
+                  <button
+                    type="button"
+                    data-testid="generate-4-variations-btn"
+                    className="rounded-full border border-white/20 bg-white/[0.06] px-4 py-2 text-xs text-zinc-100 transition hover:bg-white/[0.14]"
+                    onClick={() => handleGeneratePack(studioSetup)}
+                  >
+                    4 варианта
+                  </button>
+                </div>
               </div>
               {generatedPack ? (
                 <div className="mt-3 grid gap-3 md:grid-cols-2">
@@ -907,7 +922,7 @@ export default function PromptCopilotApp() {
                           className="rounded-full bg-white/10 px-3 py-1 text-xs text-zinc-200 hover:bg-white/20"
                           onClick={() => void handleCopyText(variantPrompt(variant))}
                         >
-                          Copy
+                          Скопировать
                         </button>
                       </div>
                       <pre className="mt-2 max-h-28 overflow-auto rounded-xl border border-white/10 bg-[#0b0c10] p-2 text-[11px] whitespace-pre-wrap text-zinc-300">
@@ -1055,8 +1070,207 @@ export default function PromptCopilotApp() {
         ) : null}
       </div>
 
+      {activeDetailsPreset && activeDetailsPreview ? (
+        <div
+          className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 px-4 py-6"
+          data-testid="task-details-overlay"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) {
+              setDetailsPresetId(null);
+            }
+          }}
+        >
+          <article
+            ref={detailsPanelRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Детали задачи"
+            tabIndex={-1}
+            className="w-full max-w-2xl rounded-3xl border border-white/15 bg-[#0d0f14] p-4"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="font-display text-2xl text-zinc-100">{activeDetailsPreset.humanTitle}</h3>
+                <p className="mt-1 text-xs text-zinc-400">Что вы получите</p>
+              </div>
+              <button
+                type="button"
+                className="rounded-full border border-white/20 px-3 py-1 text-xs text-zinc-200"
+                onClick={() => setDetailsPresetId(null)}
+              >
+                Закрыть
+              </button>
+            </div>
+
+            <ul className="mt-3 space-y-1 text-sm text-zinc-300">
+              {activeDetailsPreset.resultChips.slice(0, 3).map((item) => (
+                <li key={item}>• {item}</li>
+              ))}
+            </ul>
+
+            <div className="mt-3 rounded-2xl border border-white/10 bg-[#0a0c10] p-3">
+              <p className="text-xs uppercase tracking-[0.16em] text-zinc-500">Промпт (компакт)</p>
+              <pre className="mt-2 max-h-48 overflow-auto rounded-lg border border-white/10 bg-[#05070b] p-2 text-[11px] leading-relaxed text-zinc-300 whitespace-pre-wrap">
+                {detailsPromptMode === "compact" ? withCompactLines(activeDetailsPreview.compact) : activeDetailsPreview.full}
+              </pre>
+            </div>
+
+            <div className="mt-3 grid gap-2 sm:grid-cols-4">
+              <button
+                type="button"
+                className="rounded-full bg-white px-4 py-2 text-sm font-medium text-zinc-950"
+                onClick={() => void handleCopyText(activeDetailsPreview.compact)}
+              >
+                Копировать
+              </button>
+              <button
+                type="button"
+                className="rounded-full border border-white/20 bg-white/[0.06] px-4 py-2 text-sm text-zinc-100"
+                onClick={() => setDetailsPromptMode((current) => (current === "compact" ? "full" : "compact"))}
+              >
+                Полный
+              </button>
+              <button
+                type="button"
+                className="rounded-full border border-white/20 bg-white/[0.06] px-4 py-2 text-sm text-zinc-100"
+                onClick={() => handleGeneratePack(buildSetupForPreset(activeDetailsPreset))}
+              >
+                Варианты
+              </button>
+              <button
+                type="button"
+                className="rounded-full border border-white/20 bg-white/[0.06] px-4 py-2 text-sm text-zinc-100"
+                onClick={() => {
+                  selectTaskPreset(activeDetailsPreset);
+                  setDetailsPresetId(null);
+                  setAdvancedOpen(true);
+                }}
+              >
+                Открыть Pro
+              </button>
+            </div>
+          </article>
+        </div>
+      ) : null}
+
+      {postCopyPanel && activePostCopyPreset && activePostCopyPreview ? (
+        <aside
+          ref={postCopyPanelRef}
+          data-testid="post-copy-sheet"
+          role="dialog"
+          aria-modal="false"
+          aria-label="Панель после копирования"
+          tabIndex={-1}
+          className="fixed inset-x-3 bottom-3 z-50 rounded-2xl border border-white/15 bg-[#0d0f14]/95 p-3 shadow-[0_20px_45px_rgba(0,0,0,0.5)] backdrop-blur-xl md:inset-x-auto md:bottom-6 md:right-6 md:top-6 md:w-[420px]"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-emerald-300">Скопировано ✅</p>
+              <p className="text-xs text-zinc-400">{activePostCopyPreset.humanTitle}</p>
+            </div>
+            <button
+              type="button"
+              className="rounded-full border border-white/20 px-3 py-1 text-xs text-zinc-200"
+              onClick={() => setPostCopyPanel(null)}
+            >
+              Закрыть
+            </button>
+          </div>
+
+          <div className="mt-3 grid gap-2 sm:grid-cols-3">
+            <button
+              type="button"
+              data-testid="sheet-show-prompt"
+              className="rounded-full border border-white/20 bg-white/[0.06] px-3 py-2 text-xs text-zinc-100"
+              onClick={() =>
+                setPostCopyPanel((current) => (current ? { ...current, showPrompt: !current.showPrompt, promptMode: "compact" } : current))
+              }
+            >
+              Показать промпт
+            </button>
+            <button
+              type="button"
+              data-testid="sheet-variations"
+              className="rounded-full border border-white/20 bg-white/[0.06] px-3 py-2 text-xs text-zinc-100"
+              onClick={() => handleGeneratePack(buildSetupForPreset(activePostCopyPreset))}
+            >
+              4 варианта
+            </button>
+            <button
+              type="button"
+              data-testid="sheet-open-pro"
+              className="rounded-full border border-white/20 bg-white/[0.06] px-3 py-2 text-xs text-zinc-100"
+              onClick={() => {
+                selectTaskPreset(activePostCopyPreset);
+                setPostCopyPanel(null);
+                setAdvancedOpen(true);
+              }}
+            >
+              Открыть Pro
+            </button>
+          </div>
+
+          {postCopyPanel.showPrompt ? (
+            <div className="mt-3 rounded-2xl border border-white/10 bg-[#080a0f] p-3">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  data-testid="sheet-mode-compact"
+                  data-active={postCopyPanel.promptMode === "compact" ? "true" : "false"}
+                  className={`rounded-full px-3 py-1 text-xs ${postCopyPanel.promptMode === "compact" ? "bg-white text-zinc-950" : "bg-white/10 text-zinc-300"}`}
+                  onClick={() => setPostCopyPanel((current) => (current ? { ...current, promptMode: "compact" } : current))}
+                >
+                  Компакт
+                </button>
+                <button
+                  type="button"
+                  data-testid="sheet-mode-full"
+                  data-active={postCopyPanel.promptMode === "full" ? "true" : "false"}
+                  className={`rounded-full px-3 py-1 text-xs ${postCopyPanel.promptMode === "full" ? "bg-white text-zinc-950" : "bg-white/10 text-zinc-300"}`}
+                  onClick={() => setPostCopyPanel((current) => (current ? { ...current, promptMode: "full" } : current))}
+                >
+                  Полный
+                </button>
+              </div>
+
+              <pre data-testid="sheet-prompt-preview" className="mt-2 max-h-56 overflow-auto rounded-lg border border-white/10 bg-[#04060a] p-2 text-[11px] leading-relaxed text-zinc-300 whitespace-pre-wrap">
+                {postCopyPanel.promptMode === "compact"
+                  ? withCompactLines(activePostCopyPreview.compact)
+                  : activePostCopyPreview.full}
+              </pre>
+
+              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                <button
+                  type="button"
+                  data-testid="sheet-copy-compact"
+                  className="rounded-full border border-white/20 bg-white/[0.06] px-3 py-2 text-xs text-zinc-100"
+                  onClick={() => void handleCopyText(activePostCopyPreview.compact)}
+                >
+                  Копировать компакт
+                </button>
+                <button
+                  type="button"
+                  data-testid="sheet-copy-full"
+                  className="rounded-full border border-white/20 bg-white/[0.06] px-3 py-2 text-xs text-zinc-100"
+                  onClick={() => void handleCopyText(activePostCopyPreview.full)}
+                >
+                  Копировать полный
+                </button>
+              </div>
+            </div>
+          ) : null}
+        </aside>
+      ) : null}
+
       {advancedOpen ? (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/75 p-3 md:p-6">
+        <div
+          className="fixed inset-0 z-40 flex items-center justify-center bg-black/75 p-3 md:p-6"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) {
+              setAdvancedOpen(false);
+            }
+          }}
+        >
           <section data-testid="advanced-panel" className="max-h-[95vh] w-full max-w-[1280px] overflow-auto rounded-3xl border border-white/15 bg-[#07080a] p-4 md:p-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -1214,7 +1428,15 @@ export default function PromptCopilotApp() {
       ) : null}
 
       {activePreset ? (
-        <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/80 px-4 py-6" data-testid="gallery-modal">
+        <div
+          className="fixed inset-0 z-20 flex items-center justify-center bg-black/80 px-4 py-6"
+          data-testid="gallery-modal"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) {
+              setActivePreset(null);
+            }
+          }}
+        >
           <div className="max-h-full w-full max-w-5xl overflow-auto rounded-[30px] border border-white/15 bg-[#07080a] p-4 shadow-[0_30px_120px_rgba(0,0,0,0.65)] md:p-6">
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -1261,7 +1483,14 @@ export default function PromptCopilotApp() {
       ) : null}
 
       {activeTerm ? (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 px-4 py-6">
+        <div
+          className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 px-4 py-6"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) {
+              setActiveTermId(null);
+            }
+          }}
+        >
           <article className="w-full max-w-xl rounded-2xl border border-white/15 bg-[#0d0f14] p-4">
             <div className="flex items-start justify-between gap-3">
               <h4 className="font-display text-xl text-zinc-100">{activeTerm.term}</h4>

@@ -17,4 +17,13 @@ describe("studio preset schema", () => {
     const parsed = studioPresetSchema.safeParse(sample);
     expect(parsed.success).toBe(false);
   });
+
+  test("stores compact and full prompt templates for beginner mode", () => {
+    for (const preset of STUDIO_TASK_PRESETS) {
+      expect("promptTemplateCompact" in preset).toBe(true);
+      expect("promptTemplateFull" in preset).toBe(true);
+      expect((preset as { promptTemplateCompact: string }).promptTemplateCompact.length).toBeGreaterThan(20);
+      expect((preset as { promptTemplateFull: string }).promptTemplateFull.length).toBeGreaterThan(20);
+    }
+  });
 });
