@@ -420,6 +420,7 @@ export default function PromptCopilotApp() {
   const [proPromptDrawerOpen, setProPromptDrawerOpen] = useState(false);
   const [proPromptMode, setProPromptMode] = useState<PromptMode>("compact");
   const [proAdvancedOpen, setProAdvancedOpen] = useState(false);
+  const [isInteractingWithControl, setIsInteractingWithControl] = useState(false);
   const [proApertureSliderValue, setProApertureSliderValue] = useState(() => apertureToSliderValue(createDefaultProWizard().aperture));
   const [detailsPresetId, setDetailsPresetId] = useState<string | null>(null);
   const [detailsPromptMode, setDetailsPromptMode] = useState<PromptMode>("compact");
@@ -624,6 +625,28 @@ export default function PromptCopilotApp() {
     };
   }, [toast]);
 
+  useEffect(() => {
+    if (!isInteractingWithControl) {
+      return;
+    }
+
+    const release = () => setIsInteractingWithControl(false);
+
+    window.addEventListener("pointerup", release);
+    window.addEventListener("pointercancel", release);
+    window.addEventListener("mouseup", release);
+    window.addEventListener("touchend", release);
+    window.addEventListener("touchcancel", release);
+
+    return () => {
+      window.removeEventListener("pointerup", release);
+      window.removeEventListener("pointercancel", release);
+      window.removeEventListener("mouseup", release);
+      window.removeEventListener("touchend", release);
+      window.removeEventListener("touchcancel", release);
+    };
+  }, [isInteractingWithControl]);
+
   const resetSelectionToPresetDefaults = (preset: StudioTaskPreset) => {
     setSceneDraft(makeInitialSceneDraft(preset));
     setTechOverrides({});
@@ -763,13 +786,24 @@ export default function PromptCopilotApp() {
   const handleProApertureSelect = (aperture: string, sliderValue?: number) => {
     patchWizardState({
       aperture,
-      step: nextProStep(4),
     });
     if (typeof sliderValue === "number") {
       setProApertureSliderValue(sliderValue);
       return;
     }
     setProApertureSliderValue(apertureToSliderValue(aperture));
+  };
+
+  const handleProApertureBack = () => {
+    patchWizardState({
+      step: prevProStep(4),
+    });
+  };
+
+  const handleProApertureNext = () => {
+    patchWizardState({
+      step: nextProStep(4),
+    });
   };
 
   const handleProLightingSelect = (lighting: string) => {
@@ -829,6 +863,18 @@ export default function PromptCopilotApp() {
   };
 
   const handleProWizardKeyDown: React.KeyboardEventHandler<HTMLDivElement> = (event) => {
+    if (isInteractingWithControl) {
+      return;
+    }
+
+    if (event.target instanceof HTMLInputElement && event.target.type === "range") {
+      return;
+    }
+
+    if (proWizard.step === 4 && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
+      return;
+    }
+
     if (event.key === "ArrowLeft") {
       event.preventDefault();
       handleProBack();
@@ -839,6 +885,20 @@ export default function PromptCopilotApp() {
       event.preventDefault();
       patchWizardState({ step: clampProStep(proWizard.step + 1) });
     }
+  };
+
+  const stopWizardGesturePropagation = (event: React.SyntheticEvent<HTMLElement>) => {
+    event.stopPropagation();
+  };
+
+  const beginControlInteraction = (event: React.SyntheticEvent<HTMLElement>) => {
+    event.stopPropagation();
+    setIsInteractingWithControl(true);
+  };
+
+  const endControlInteraction = (event: React.SyntheticEvent<HTMLElement>) => {
+    event.stopPropagation();
+    setIsInteractingWithControl(false);
   };
 
   const applyReferenceTerm = (termId: string) => {
@@ -1310,9 +1370,24 @@ export default function PromptCopilotApp() {
 
                         <section className="shrink-0 pr-4" style={{ width: `${proSlideWidth}%` }}>
                           <h3 className="text-sm font-semibold text-zinc-100">4. Настрой диафрагму</h3>
-                          <label className="mt-3 block rounded-2xl border border-white/10 bg-white/[0.03] p-3">
-                            <span className="text-xs text-zinc-400">Больше размытия ↔ Больше деталей</span>
+                          <div
+                            data-testid="pro-aperture-slider-wrapper"
+                            className="mt-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3 touch-none overscroll-contain"
+                            onPointerDown={beginControlInteraction}
+                            onPointerMove={stopWizardGesturePropagation}
+                            onPointerUp={endControlInteraction}
+                            onPointerCancel={endControlInteraction}
+                            onMouseDown={beginControlInteraction}
+                            onMouseMove={stopWizardGesturePropagation}
+                            onMouseUp={endControlInteraction}
+                            onTouchStart={beginControlInteraction}
+                            onTouchMove={stopWizardGesturePropagation}
+                            onTouchEnd={endControlInteraction}
+                            onTouchCancel={endControlInteraction}
+                          >
+                            <p className="text-xs text-zinc-400">Больше размытия ↔ Больше деталей</p>
                             <input
+                              data-testid="pro-aperture-slider"
                               type="range"
                               min={0}
                               max={100}
@@ -1325,7 +1400,7 @@ export default function PromptCopilotApp() {
                               }}
                             />
                             <p className="mt-2 text-sm text-zinc-200">Текущее: {proWizard.aperture}</p>
-                          </label>
+                          </div>
                           <div className="mt-3 flex flex-wrap gap-2">
                             {PRO_APERTURE_PRESETS.map((aperture) => (
                               <button
@@ -1341,6 +1416,24 @@ export default function PromptCopilotApp() {
                                 {aperture}
                               </button>
                             ))}
+                          </div>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <button
+                              data-testid="pro-aperture-back"
+                              type="button"
+                              className="rounded-full border border-white/20 bg-white/[0.06] px-4 py-2 text-xs text-zinc-100 transition hover:bg-white/[0.12]"
+                              onClick={handleProApertureBack}
+                            >
+                              Назад
+                            </button>
+                            <button
+                              data-testid="pro-aperture-next"
+                              type="button"
+                              className="rounded-full bg-white px-4 py-2 text-xs font-semibold text-zinc-950 transition hover:bg-zinc-200"
+                              onClick={handleProApertureNext}
+                            >
+                              Дальше
+                            </button>
                           </div>
                         </section>
 

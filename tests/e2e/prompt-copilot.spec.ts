@@ -65,3 +65,44 @@ test("gallery modal closes by backdrop click", async ({ page }) => {
   await page.getByTestId("gallery-modal").click({ position: { x: 8, y: 8 } });
   await expect(page.getByTestId("gallery-modal")).toHaveCount(0);
 });
+
+test("pro aperture slider does not auto-advance and uses explicit next/back controls", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.clear();
+  });
+
+  await page.goto("/");
+  await page.getByTestId("tab-studio").click();
+  await page.getByRole("button", { name: "Pro режим" }).click();
+
+  await page.getByTestId("pro-step-camera-grid").getByRole("button", { name: /Digital Full Frame/ }).click();
+  await page.getByTestId("pro-step-lens-grid").getByRole("button", { name: /Spherical Prime/ }).click();
+  await page.getByTestId("pro-step-focal-grid").getByRole("button", { name: /50 мм/ }).click();
+
+  await expect(page.getByText("Шаг 4 / 6")).toBeVisible();
+  const slider = page.getByTestId("pro-aperture-slider");
+
+  await slider.evaluate((input) => {
+    const element = input as HTMLInputElement;
+    element.value = "75";
+    element.dispatchEvent(new Event("input", { bubbles: true }));
+    element.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+
+  await expect(page.getByText("Шаг 4 / 6")).toBeVisible();
+
+  await page.getByRole("button", { name: "f/5.6" }).click();
+  await expect(page.getByText("Шаг 4 / 6")).toBeVisible();
+
+  await slider.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(page.getByText("Шаг 4 / 6")).toBeVisible();
+
+  await page.getByTestId("pro-aperture-back").click();
+  await expect(page.getByText("Шаг 3 / 6")).toBeVisible();
+  await page.getByTestId("pro-step-focal-grid").getByRole("button", { name: /50 мм/ }).click();
+  await expect(page.getByText("Шаг 4 / 6")).toBeVisible();
+
+  await page.getByTestId("pro-aperture-next").click();
+  await expect(page.getByText("Шаг 5 / 6")).toBeVisible();
+});
