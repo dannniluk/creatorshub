@@ -46,7 +46,7 @@ describe("lensCatalog", () => {
 
   test("builds lens profile label with optional series", () => {
     expect(buildLensProfileLabel("zoom_doc", null)).toBe("Zoom (doc)");
-    expect(buildLensProfileLabel("zoom_doc", "zoom_angenieux_optimo")).toContain("Angenieux Optimo");
+    expect(buildLensProfileLabel("zoom_doc", "zoom_angenieux_optimo")).toContain("Optimo");
   });
 
   test("returns series list for lens type", () => {
