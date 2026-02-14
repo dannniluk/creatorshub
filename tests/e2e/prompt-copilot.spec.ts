@@ -40,6 +40,10 @@ test("studio beginner flow: card grid -> copy -> compact sheet -> pro", async ({
   await expect(page.getByTestId("pro-wizard")).toBeVisible();
   await expect(page.getByTestId("pro-step-camera-grid").locator("button")).toHaveCount(16);
   await expect(page.getByTestId("pro-current-setup")).toBeVisible();
+  await page.getByTestId("pro-step-camera-grid").getByRole("button", { name: /Digital Full Frame/ }).click();
+  await expect(page.getByText("Шаг 2 / 6")).toBeVisible();
+  await expect(page.getByTestId("pro-step-lens-grid").locator("button")).toHaveCount(8);
+  await expect(page.getByTestId("pro-step-lens-grid").getByText("Spherical Prime")).toBeVisible();
   await page.getByRole("button", { name: "Минималистичный режим" }).click();
   await expect(page.getByTestId("pro-wizard")).toHaveCount(0);
 

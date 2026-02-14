@@ -1186,10 +1186,10 @@ export default function PromptCopilotApp() {
 
                     <div className="mt-4 overflow-hidden">
                       <div
-                        className="flex w-[600%] transition-transform duration-500 ease-out"
-                        style={{ transform: `translateX(-${(proWizard.step - 1) * 16.6667}%)` }}
+                        className="flex transition-transform duration-500 ease-out"
+                        style={{ transform: `translateX(-${(proWizard.step - 1) * 100}%)` }}
                       >
-                        <section className="w-full shrink-0 pr-4">
+                        <section className="min-w-full shrink-0 pr-4">
                           <h3 className="text-sm font-semibold text-zinc-100">1. Выбери камеру</h3>
                           <div data-testid="pro-step-camera-grid" className="mt-3 grid gap-2 sm:grid-cols-3 xl:grid-cols-4">
                             {PRO_CAMERA_OPTIONS.map((camera) => (
@@ -1217,7 +1217,7 @@ export default function PromptCopilotApp() {
                           </div>
                         </section>
 
-                        <section className="w-full shrink-0 pr-4">
+                        <section className="min-w-full shrink-0 pr-4">
                           <h3 className="text-sm font-semibold text-zinc-100">2. Выбери тип объектива</h3>
                           <div data-testid="pro-step-lens-grid" className="mt-3 grid gap-2 sm:grid-cols-3 xl:grid-cols-4">
                             {PRO_LENS_OPTIONS.map((lens) => (
@@ -1238,7 +1238,7 @@ export default function PromptCopilotApp() {
                           </div>
                         </section>
 
-                        <section className="w-full shrink-0 pr-4">
+                        <section className="min-w-full shrink-0 pr-4">
                           <h3 className="text-sm font-semibold text-zinc-100">3. Выбери фокусное расстояние</h3>
                           <div data-testid="pro-step-focal-grid" className="mt-3 grid grid-cols-4 gap-2">
                             {PRO_FOCAL_OPTIONS.map((focal) => (
@@ -1259,7 +1259,7 @@ export default function PromptCopilotApp() {
                           <p className="mt-3 text-xs text-zinc-400">{proFocalExplanation}</p>
                         </section>
 
-                        <section className="w-full shrink-0 pr-4">
+                        <section className="min-w-full shrink-0 pr-4">
                           <h3 className="text-sm font-semibold text-zinc-100">4. Настрой диафрагму</h3>
                           <label className="mt-3 block rounded-2xl border border-white/10 bg-white/[0.03] p-3">
                             <span className="text-xs text-zinc-400">Больше размытия ↔ Больше деталей</span>
@@ -1295,7 +1295,7 @@ export default function PromptCopilotApp() {
                           </div>
                         </section>
 
-                        <section className="w-full shrink-0 pr-4">
+                        <section className="min-w-full shrink-0 pr-4">
                           <h3 className="text-sm font-semibold text-zinc-100">5. Выбери свет</h3>
                           <div data-testid="pro-step-light-grid" className="mt-3 grid gap-2 sm:grid-cols-3 xl:grid-cols-4">
                             {PRO_LIGHTING_OPTIONS.map((light) => (
@@ -1316,7 +1316,7 @@ export default function PromptCopilotApp() {
                           </div>
                         </section>
 
-                        <section className="w-full shrink-0 pr-4">
+                        <section className="min-w-full shrink-0 pr-4">
                           <h3 className="text-sm font-semibold text-zinc-100">6. Финал</h3>
                           <article className="mt-3 rounded-2xl border border-white/10 bg-[#090b10] p-4">
                             <p className="text-sm font-semibold text-zinc-100">Вы выбрали</p>
