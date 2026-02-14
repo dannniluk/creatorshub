@@ -23,15 +23,19 @@ import {
   PRO_FOCAL_UI,
   PRO_LIGHTING_OPTIONS,
   PRO_LOCK_TEXT,
+  PRO_STEP0_CONFIG,
+  type ProStep0State,
   type ProWizardState,
   type ProWizardStep,
   clampProStep,
+  createDefaultProStep0,
   createDefaultProWizard,
   explainAperture,
   explainFocalLength,
   getRecommendedApertureRule,
   getFocalOption,
   getRecommendedFocalRule,
+  isProStep0Complete,
   mapBlurSliderToAperture,
   nextProStep,
   patchProWizard,
@@ -83,7 +87,7 @@ const STORAGE_KEYS = {
 
 const GALLERY_CHUNK_SIZE = 8;
 const COMPACT_PREVIEW_LINES = 6;
-const PRO_WIZARD_STEPS_TOTAL = 6;
+const PRO_WIZARD_STEPS_TOTAL = 7;
 const REQUIRED_NEGATIVE_CONSTRAINTS = ["no watermark", "no text", "no deformed faces/hands", "no extra fingers", "no artifacts"];
 const FOCUSABLE_SELECTOR =
   'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -270,6 +274,71 @@ function apertureToSliderValue(aperture: string): number {
   return index * 25;
 }
 
+function mapPresetToStep0Category(category: CreatorCategory): string {
+  switch (category) {
+    case "Fashion":
+      return "beauty_premium";
+    case "People":
+      return "portrait_headshot";
+    case "Food":
+      return "food_beverage";
+    case "Interiors":
+      return "interior_architecture";
+    case "Product":
+    default:
+      return "product_packshot";
+  }
+}
+
+function mapPresetGoalToPrimaryGoal(goal: GoalTag): string {
+  switch (goal) {
+    case "Texture":
+      return "texture_clarity";
+    case "Beauty gloss":
+      return "premium_gloss";
+    case "Catalog":
+      return "label_legibility";
+    case "Clean portrait":
+      return "clean_minimal";
+    case "Cinematic drama":
+      return "ad_ready_layout";
+    case "Night mood":
+    default:
+      return "clean_minimal";
+  }
+}
+
+function buildStep0FromPreset(preset: StudioTaskPreset): ProStep0State {
+  return {
+    ...createDefaultProStep0(),
+    categoryId: mapPresetToStep0Category(preset.category),
+    channelId: "ecom_site",
+    primaryGoalId: mapPresetGoalToPrimaryGoal(preset.goal),
+    subjectLine: preset.humanTitle,
+  };
+}
+
+function buildSceneDraftFromStep0(step0: ProStep0State): SceneDraft {
+  const category = PRO_STEP0_CONFIG.categories.find((item) => item.id === step0.categoryId);
+  const channel = PRO_STEP0_CONFIG.channels.find((item) => item.id === step0.channelId);
+  const primaryGoal = PRO_STEP0_CONFIG.primaryGoals.find((item) => item.id === step0.primaryGoalId);
+  const quantity = PRO_STEP0_CONFIG.enums.quantity.find((item) => item.id === step0.quantityId);
+  const angle = PRO_STEP0_CONFIG.enums.angle.find((item) => item.id === step0.angleId);
+  const background = PRO_STEP0_CONFIG.enums.background.find((item) => item.id === step0.backgroundId);
+  const surface = PRO_STEP0_CONFIG.enums.surface.find((item) => item.id === step0.surfaceId);
+  const props = PRO_STEP0_CONFIG.enums.propsPolicy.find((item) => item.id === step0.propsPolicyId);
+  const safeArea = PRO_STEP0_CONFIG.enums.safeArea.find((item) => item.id === step0.safeAreaId);
+
+  const subject = step0.subjectLine.trim();
+  const goal = `${category?.title ?? "Сцена"} для ${channel?.title ?? "канала"}. ${primaryGoal?.title ?? "Чистый коммерческий результат"}. ${subject}`;
+  const action = `${quantity?.title ?? "Один объект"} статичен(ы), ${angle?.title?.toLowerCase() ?? "фронтально"}, аккуратная постановка и чистые края.`;
+  const environment = `Фон: ${background?.title ?? "Белый seamless"}. Поверхность: ${surface?.title ?? "Матовая поверхность"}. Props: ${
+    props?.title ?? "Без props"
+  }. ${safeArea?.text ?? ""}`.trim();
+
+  return { goal, action, environment };
+}
+
 function buildSetupFromProWizard(input: { preset: StudioTaskPreset; wizard: ProWizardState }): StudioSetup {
   const negativeLock = Array.from(new Set([...REQUIRED_NEGATIVE_CONSTRAINTS, ...input.wizard.locks.negativeLock])).join(", ");
 
@@ -418,7 +487,8 @@ export default function PromptCopilotApp() {
     }
 
     const restored = patchProWizard(createDefaultProWizard(), {
-      step: clampProStep(Number(stored.step ?? 1)),
+      step: clampProStep(Number(stored.step ?? 0)),
+      step0: stored.step0,
       camera: stored.camera,
       selectedLensTypeId: stored.selectedLensTypeId,
       selectedLensSeriesId: stored.selectedLensSeriesId,
@@ -780,6 +850,8 @@ export default function PromptCopilotApp() {
 
   const openProFromPreset = (preset: StudioTaskPreset) => {
     selectTaskPreset(preset);
+    const step0 = buildStep0FromPreset(preset);
+    const step0Scene = buildSceneDraftFromStep0(step0);
     const initialLensTypeId =
       resolveLensTypeIdFromProfile(preset.defaults.lens_profile) ??
       recommendLensTypeByContext({ category: preset.category, goal: preset.goal });
@@ -790,7 +862,8 @@ export default function PromptCopilotApp() {
     });
 
     const baseWizard = createDefaultProWizard({
-      step: 1,
+      step: 0,
+      step0,
       camera: preset.defaults.camera,
       selectedLensTypeId: initialLensTypeId,
       selectedLensSeriesId: null,
@@ -798,7 +871,10 @@ export default function PromptCopilotApp() {
       focal_mm: initialLensDerived.defaultFocal,
       aperture: initialLensDerived.defaultAperture,
       lighting_style: preset.defaults.lighting,
-      scene: withTaskSceneDefaults(preset),
+      scene: {
+        ...withTaskSceneDefaults(preset),
+        ...step0Scene,
+      },
     });
     setProWizard(baseWizard);
     setProApertureSliderValue(apertureToSliderValue(baseWizard.aperture));
@@ -813,6 +889,41 @@ export default function PromptCopilotApp() {
 
   const handleProBack = () => {
     patchWizardState({ step: prevProStep(proWizard.step) });
+  };
+
+  const handleProStep0Change = <K extends keyof ProStep0State>(key: K, value: ProStep0State[K]) => {
+    patchWizardState({
+      step0: {
+        ...proWizard.step0,
+        [key]: value,
+      },
+    });
+  };
+
+  const handleProStep0ChannelSelect = (channelId: string) => {
+    const channel = PRO_STEP0_CONFIG.channels.find((item) => item.id === channelId);
+    patchWizardState({
+      step0: {
+        ...proWizard.step0,
+        channelId,
+        safeAreaId:
+          proWizard.step0.safeAreaId === PRO_STEP0_CONFIG.defaults.safeAreaId
+            ? channel?.defaultSafeAreaId ?? proWizard.step0.safeAreaId
+            : proWizard.step0.safeAreaId,
+      },
+    });
+  };
+
+  const handleProStep0Next = () => {
+    if (!isProStep0Complete(proWizard.step0)) {
+      setToast({ kind: "error", text: "Заполни категорию, канал, цель и предмет" });
+      return;
+    }
+
+    patchWizardState({
+      step: 1,
+      scene: buildSceneDraftFromStep0(proWizard.step0),
+    });
   };
 
   const handleProCameraSelect = (camera: string) => {
@@ -943,6 +1054,7 @@ export default function PromptCopilotApp() {
   };
 
   const handleProReset = () => {
+    const step0 = buildStep0FromPreset(selectedPreset);
     const defaultType = recommendLensTypeByContext({ category: selectedPreset.category, goal: selectedPreset.goal });
     const defaultLensDerived = deriveLensRecommendations({
       typeId: defaultType,
@@ -950,12 +1062,14 @@ export default function PromptCopilotApp() {
       availableFocals: allFocalOptions,
     });
     const reset = createDefaultProWizard({
+      step: 0,
+      step0,
       selectedLensTypeId: defaultType,
       selectedLensSeriesId: null,
       lens_profile: buildLensProfileLabel(defaultType, null),
       focal_mm: defaultLensDerived.defaultFocal,
       aperture: defaultLensDerived.defaultAperture,
-      scene: withTaskSceneDefaults(selectedPreset),
+      scene: buildSceneDraftFromStep0(step0),
     });
     setProWizard(reset);
     setProApertureSliderValue(apertureToSliderValue(reset.aperture));
@@ -1011,6 +1125,10 @@ export default function PromptCopilotApp() {
 
     if (event.key === "ArrowRight") {
       event.preventDefault();
+      if (proWizard.step === 0 && !isProStep0Complete(proWizard.step0)) {
+        setToast({ kind: "error", text: "Заполни обязательные поля шага 0" });
+        return;
+      }
       patchWizardState({ step: clampProStep(proWizard.step + 1) });
     }
   };
@@ -1051,7 +1169,7 @@ export default function PromptCopilotApp() {
 
   const galleryImageHeights = ["h-44", "h-72", "h-56", "h-80", "h-52", "h-64"] as const;
   const proSlideWidth = 100 / PRO_WIZARD_STEPS_TOTAL;
-  const proSlideOffset = (proWizard.step - 1) * proSlideWidth;
+  const proSlideOffset = proWizard.step * proSlideWidth;
 
   return (
     <div className="min-h-screen bg-[#040405] text-zinc-100">
@@ -1333,7 +1451,7 @@ export default function PromptCopilotApp() {
                         type="button"
                         className="rounded-full border border-white/20 bg-white/[0.05] px-3 py-1.5 text-xs text-zinc-100 disabled:opacity-40"
                         onClick={handleProBack}
-                        disabled={proWizard.step === 1}
+                        disabled={proWizard.step === 0}
                       >
                         Назад
                       </button>
@@ -1349,8 +1467,9 @@ export default function PromptCopilotApp() {
                       </button>
                     </div>
 
-                    <div className="mt-3 grid grid-cols-3 gap-1.5 md:grid-cols-6">
+                    <div className="mt-3 grid grid-cols-3 gap-1.5 md:grid-cols-7">
                       {[
+                        ["Бриф", 0],
                         ["Камера", 1],
                         ["Объектив", 2],
                         ["Фокусное", 3],
@@ -1390,6 +1509,178 @@ export default function PromptCopilotApp() {
                           transform: `translateX(-${proSlideOffset}%)`,
                         }}
                       >
+                        <section className="shrink-0 pr-4" style={{ width: `${proSlideWidth}%` }}>
+                          <h3 className="text-sm font-semibold text-zinc-100">0. Бриф задачи</h3>
+                          <p className="mt-2 text-xs text-zinc-400">
+                            Заполни базовый бриф: это задаёт контекст, формат и быстрые дефолты для следующих шагов.
+                          </p>
+
+                          <div data-testid="pro-step0-panel" className="mt-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+                            <p className="text-[11px] uppercase tracking-[0.14em] text-zinc-500">Категория</p>
+                            <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                              {PRO_STEP0_CONFIG.categories.map((category) => (
+                                <button
+                                  key={category.id}
+                                  type="button"
+                                  data-testid={`pro-step0-category-${category.id}`}
+                                  className={`rounded-xl border p-2 text-left transition ${
+                                    proWizard.step0.categoryId === category.id
+                                      ? "border-white/35 bg-white/[0.1]"
+                                      : "border-white/10 bg-white/[0.02] hover:bg-white/[0.07]"
+                                  }`}
+                                  onClick={() => handleProStep0Change("categoryId", category.id)}
+                                >
+                                  <p className="text-xs font-semibold text-zinc-100">{category.title}</p>
+                                  <p className="mt-1 text-[11px] text-zinc-400">{category.subtitle}</p>
+                                </button>
+                              ))}
+                            </div>
+
+                            <p className="mt-3 text-[11px] uppercase tracking-[0.14em] text-zinc-500">Канал</p>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {PRO_STEP0_CONFIG.channels.map((channel) => (
+                                <button
+                                  key={channel.id}
+                                  type="button"
+                                  data-testid={`pro-step0-channel-${channel.id}`}
+                                  className={`rounded-full border px-3 py-1.5 text-[11px] transition ${
+                                    proWizard.step0.channelId === channel.id
+                                      ? "border-white/35 bg-white/[0.12] text-zinc-100"
+                                      : "border-white/10 bg-white/[0.04] text-zinc-300 hover:bg-white/[0.1]"
+                                  }`}
+                                  onClick={() => handleProStep0ChannelSelect(channel.id)}
+                                >
+                                  {channel.title}
+                                </button>
+                              ))}
+                            </div>
+
+                            <p className="mt-3 text-[11px] uppercase tracking-[0.14em] text-zinc-500">Главная цель</p>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {PRO_STEP0_CONFIG.primaryGoals.map((goal) => (
+                                <button
+                                  key={goal.id}
+                                  type="button"
+                                  data-testid={`pro-step0-goal-${goal.id}`}
+                                  className={`rounded-full border px-3 py-1.5 text-[11px] transition ${
+                                    proWizard.step0.primaryGoalId === goal.id
+                                      ? "border-white/35 bg-white/[0.12] text-zinc-100"
+                                      : "border-white/10 bg-white/[0.04] text-zinc-300 hover:bg-white/[0.1]"
+                                  }`}
+                                  onClick={() => handleProStep0Change("primaryGoalId", goal.id)}
+                                >
+                                  {goal.title}
+                                </button>
+                              ))}
+                            </div>
+
+                            <label className="mt-3 block text-[11px] uppercase tracking-[0.14em] text-zinc-500">
+                              Предмет / объект
+                              <input
+                                data-testid="pro-step0-subject"
+                                type="text"
+                                className="mt-1.5 w-full rounded-xl border border-white/15 bg-[#090b10] px-3 py-2 text-sm text-zinc-100 outline-none"
+                                placeholder="Например: флакон сыворотки 30ml"
+                                value={proWizard.step0.subjectLine}
+                                onChange={(event) => handleProStep0Change("subjectLine", event.target.value)}
+                              />
+                            </label>
+
+                            <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                              <label className="text-[11px] text-zinc-400">
+                                Количество
+                                <select
+                                  className="mt-1 w-full rounded-lg border border-white/15 bg-[#090b10] px-2 py-1.5 text-xs text-zinc-100"
+                                  value={proWizard.step0.quantityId}
+                                  onChange={(event) => handleProStep0Change("quantityId", event.target.value)}
+                                >
+                                  {PRO_STEP0_CONFIG.enums.quantity.map((item) => (
+                                    <option key={item.id} value={item.id}>
+                                      {item.title}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+                              <label className="text-[11px] text-zinc-400">
+                                Угол
+                                <select
+                                  className="mt-1 w-full rounded-lg border border-white/15 bg-[#090b10] px-2 py-1.5 text-xs text-zinc-100"
+                                  value={proWizard.step0.angleId}
+                                  onChange={(event) => handleProStep0Change("angleId", event.target.value)}
+                                >
+                                  {PRO_STEP0_CONFIG.enums.angle.map((item) => (
+                                    <option key={item.id} value={item.id}>
+                                      {item.title}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+                              <label className="text-[11px] text-zinc-400">
+                                Фон
+                                <select
+                                  className="mt-1 w-full rounded-lg border border-white/15 bg-[#090b10] px-2 py-1.5 text-xs text-zinc-100"
+                                  value={proWizard.step0.backgroundId}
+                                  onChange={(event) => handleProStep0Change("backgroundId", event.target.value)}
+                                >
+                                  {PRO_STEP0_CONFIG.enums.background.map((item) => (
+                                    <option key={item.id} value={item.id}>
+                                      {item.title}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+                              <label className="text-[11px] text-zinc-400">
+                                Props
+                                <select
+                                  className="mt-1 w-full rounded-lg border border-white/15 bg-[#090b10] px-2 py-1.5 text-xs text-zinc-100"
+                                  value={proWizard.step0.propsPolicyId}
+                                  onChange={(event) => handleProStep0Change("propsPolicyId", event.target.value)}
+                                >
+                                  {PRO_STEP0_CONFIG.enums.propsPolicy.map((item) => (
+                                    <option key={item.id} value={item.id}>
+                                      {item.title}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+                              <label className="text-[11px] text-zinc-400">
+                                Safe area
+                                <select
+                                  className="mt-1 w-full rounded-lg border border-white/15 bg-[#090b10] px-2 py-1.5 text-xs text-zinc-100"
+                                  value={proWizard.step0.safeAreaId}
+                                  onChange={(event) => handleProStep0Change("safeAreaId", event.target.value)}
+                                >
+                                  {PRO_STEP0_CONFIG.enums.safeArea.map((item) => (
+                                    <option key={item.id} value={item.id}>
+                                      {item.title}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+                              <label className="flex items-end gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-2 py-2 text-[11px] text-zinc-300">
+                                <input
+                                  type="checkbox"
+                                  checked={proWizard.step0.textCritical}
+                                  onChange={(event) => handleProStep0Change("textCritical", event.target.checked)}
+                                />
+                                Text critical
+                              </label>
+                            </div>
+
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <button
+                                data-testid="pro-step0-next"
+                                type="button"
+                                className="rounded-full bg-white px-4 py-2 text-xs font-semibold text-zinc-950 transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
+                                onClick={handleProStep0Next}
+                                disabled={!isProStep0Complete(proWizard.step0)}
+                              >
+                                Дальше
+                              </button>
+                            </div>
+                          </div>
+                        </section>
+
                         <section className="shrink-0 pr-4" style={{ width: `${proSlideWidth}%` }}>
                           <h3 className="text-sm font-semibold text-zinc-100">1. Выбери камеру</h3>
                           <div data-testid="pro-step-camera-grid" className="mt-3 grid gap-2 sm:grid-cols-3 xl:grid-cols-4">

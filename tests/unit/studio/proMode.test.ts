@@ -6,11 +6,13 @@ import {
   PRO_APERTURE_PRESETS,
   PRO_FOCAL_UI,
   buildProPrompts,
+  createDefaultProStep0,
   createDefaultProWizard,
   explainAperture,
   explainFocalLength,
   getRecommendedApertureRule,
   getRecommendedFocalRule,
+  isProStep0Complete,
   mapBlurSliderToAperture,
 } from "@/lib/studio/proMode";
 
@@ -18,7 +20,12 @@ describe("createDefaultProWizard", () => {
   test("creates production-safe defaults with step 1", () => {
     const wizard = createDefaultProWizard();
 
-    expect(wizard.step).toBe(1);
+    expect(wizard.step).toBe(0);
+    expect(wizard.step0.categoryId).toBe("");
+    expect(wizard.step0.channelId).toBe("");
+    expect(wizard.step0.primaryGoalId).toBe("");
+    expect(wizard.step0.subjectLine).toBe("");
+    expect(wizard.step0.textCritical).toBe(false);
     expect(wizard.camera).toBe("Digital Full Frame");
     expect(wizard.selectedLensTypeId).toBe("spherical_prime");
     expect(wizard.selectedLensSeriesId).toBeNull();
@@ -27,6 +34,22 @@ describe("createDefaultProWizard", () => {
     expect(wizard.locks.compositionLock).toBe(true);
     expect(wizard.locks.noTextStrict).toBe(true);
     expect(wizard.locks.negativeLock).toEqual(DEFAULT_REQUIRED_NEGATIVE_LOCK);
+  });
+});
+
+describe("step0 completeness", () => {
+  test("requires category, channel, primary goal and subject line", () => {
+    const empty = createDefaultProStep0();
+    expect(isProStep0Complete(empty)).toBe(false);
+
+    const filled = {
+      ...empty,
+      categoryId: "product_packshot",
+      channelId: "ecom_site",
+      primaryGoalId: "label_legibility",
+      subjectLine: "Стеклянная банка крема",
+    };
+    expect(isProStep0Complete(filled)).toBe(true);
   });
 });
 

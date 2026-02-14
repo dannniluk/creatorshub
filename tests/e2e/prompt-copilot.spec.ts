@@ -38,6 +38,12 @@ test("studio beginner flow: card grid -> copy -> compact sheet -> pro", async ({
   await page.getByTestId("sheet-open-pro").click();
   await expect(page.getByRole("heading", { name: "Pro режим" })).toBeVisible();
   await expect(page.getByTestId("pro-wizard")).toBeVisible();
+  await expect(page.getByTestId("pro-step0-panel")).toBeVisible();
+  await page.getByTestId("pro-step0-category-beauty_premium").click();
+  await page.getByTestId("pro-step0-channel-instagram_feed").click();
+  await page.getByTestId("pro-step0-goal-premium_gloss").click();
+  await page.getByTestId("pro-step0-subject").fill("Флакон парфюма");
+  await page.getByTestId("pro-step0-next").click();
   await expect(page.getByTestId("pro-step-camera-grid").locator("button")).toHaveCount(16);
   await expect(page.getByTestId("pro-current-setup")).toBeVisible();
   await page.getByTestId("pro-step-camera-grid").getByRole("button", { name: /Digital Full Frame/ }).click();
@@ -74,6 +80,11 @@ test("pro aperture slider does not auto-advance and uses explicit next/back cont
   await page.goto("/");
   await page.getByTestId("tab-studio").click();
   await page.getByRole("button", { name: "Pro режим" }).click();
+  await page.getByTestId("pro-step0-category-product_packshot").click();
+  await page.getByTestId("pro-step0-channel-ecom_site").click();
+  await page.getByTestId("pro-step0-goal-label_legibility").click();
+  await page.getByTestId("pro-step0-subject").fill("Банка крема");
+  await page.getByTestId("pro-step0-next").click();
 
   await page.getByTestId("pro-step-camera-grid").getByRole("button", { name: /Digital Full Frame/ }).click();
   await page.getByTestId("pro-step-lens-grid").getByRole("button", { name: /Spherical Prime/ }).click();
@@ -117,6 +128,11 @@ test("pro lens type supports optional series and filters focal options", async (
   await page.goto("/");
   await page.getByTestId("tab-studio").click();
   await page.getByRole("button", { name: "Pro режим" }).click();
+  await page.getByTestId("pro-step0-category-product_packshot").click();
+  await page.getByTestId("pro-step0-channel-ecom_site").click();
+  await page.getByTestId("pro-step0-goal-label_legibility").click();
+  await page.getByTestId("pro-step0-subject").fill("Бутылка шампуня");
+  await page.getByTestId("pro-step0-next").click();
 
   await page.getByTestId("pro-step-camera-grid").getByRole("button", { name: /Digital Full Frame/ }).click();
   await page.getByTestId("pro-step-lens-grid").getByRole("button", { name: /Telephoto Prime/ }).click();

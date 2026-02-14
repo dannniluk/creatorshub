@@ -5,8 +5,30 @@ import {
   type LensTypeId,
   resolveLensTypeIdFromProfile,
 } from "@/lib/studio/lensCatalog";
+import nanoBananaProConfig from "@/lib/studio/config/nano-banana-pro.ru.json";
 
-export type ProWizardStep = 1 | 2 | 3 | 4 | 5 | 6;
+export type ProWizardStep = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+
+export type ProStep0State = {
+  categoryId: string;
+  channelId: string;
+  primaryGoalId: string;
+  subjectLine: string;
+  quantityId: string;
+  angleId: string;
+  backgroundId: string;
+  surfaceId: string;
+  propsPolicyId: string;
+  shadowId: string;
+  reflectionControlId: string;
+  focusModeId: string;
+  realismId: string;
+  textCritical: boolean;
+  safeAreaId: string;
+  brandTone: string;
+  textInImage: string;
+  referenceInputs: string;
+};
 
 export type ProWizardScene = {
   goal: string;
@@ -21,6 +43,7 @@ export type ProWizardOutput = {
 
 export type ProWizardState = {
   step: ProWizardStep;
+  step0: ProStep0State;
   camera: string;
   selectedLensTypeId: LensTypeId;
   selectedLensSeriesId: string | null;
@@ -501,8 +524,46 @@ export const PRO_LOCK_TEXT = {
   quality: "avoid artifacts, preserve visual consistency, no text in frame.",
 };
 
-export const PRO_MIN_STEP: ProWizardStep = 1;
+export const PRO_MIN_STEP: ProWizardStep = 0;
 export const PRO_MAX_STEP: ProWizardStep = 6;
+
+export const PRO_STEP0_CONFIG = {
+  categories: nanoBananaProConfig.step0.categories,
+  primaryGoals: nanoBananaProConfig.step0.primaryGoals,
+  channels: nanoBananaProConfig.step0.channels,
+  enums: nanoBananaProConfig.step0.enums,
+  defaults: nanoBananaProConfig.ui.defaults,
+  required: nanoBananaProConfig.ui.step0.required,
+  quickToggles: nanoBananaProConfig.ui.step0.quickToggles,
+  advancedSections: nanoBananaProConfig.ui.step0.advancedSections,
+} as const;
+
+export function createDefaultProStep0(): ProStep0State {
+  return {
+    categoryId: "",
+    channelId: "",
+    primaryGoalId: "",
+    subjectLine: "",
+    quantityId: PRO_STEP0_CONFIG.defaults.quantityId,
+    angleId: PRO_STEP0_CONFIG.defaults.angleId,
+    backgroundId: PRO_STEP0_CONFIG.defaults.backgroundId,
+    surfaceId: PRO_STEP0_CONFIG.defaults.surfaceId,
+    propsPolicyId: PRO_STEP0_CONFIG.defaults.propsPolicyId,
+    shadowId: PRO_STEP0_CONFIG.defaults.shadowId,
+    reflectionControlId: PRO_STEP0_CONFIG.defaults.reflectionControlId,
+    focusModeId: PRO_STEP0_CONFIG.defaults.focusModeId,
+    realismId: PRO_STEP0_CONFIG.defaults.realismId,
+    textCritical: PRO_STEP0_CONFIG.defaults.textCritical,
+    safeAreaId: PRO_STEP0_CONFIG.defaults.safeAreaId,
+    brandTone: "",
+    textInImage: "",
+    referenceInputs: "",
+  };
+}
+
+export function isProStep0Complete(step0: ProStep0State): boolean {
+  return Boolean(step0.categoryId && step0.channelId && step0.primaryGoalId && step0.subjectLine.trim());
+}
 
 function toStep(value: number): ProWizardStep {
   if (value <= PRO_MIN_STEP) {
@@ -702,6 +763,7 @@ export function buildProPrompts(state: Pick<
 }
 
 type ProWizardSeed = {
+  step0?: Partial<ProStep0State>;
   camera?: string;
   selectedLensTypeId?: LensTypeId;
   selectedLensSeriesId?: string | null;
@@ -728,8 +790,15 @@ export function createDefaultProWizard(seed?: ProWizardSeed): ProWizardState {
   const lensSeries = seriesCandidate && getLensSeries(seriesCandidate)?.typeId === lensType ? seriesCandidate : null;
   const lensProfile = seed?.lens_profile ?? buildLensProfileLabel(lensType, lensSeries);
 
+  const baseStep0 = createDefaultProStep0();
+
   const state: ProWizardState = {
-    step: seed?.step ?? 1,
+    step: seed?.step ?? 0,
+    step0: {
+      ...baseStep0,
+      ...seed?.step0,
+      textCritical: seed?.step0?.textCritical ?? baseStep0.textCritical,
+    },
     camera: seed?.camera ?? "Digital Full Frame",
     selectedLensTypeId: lensType,
     selectedLensSeriesId: lensSeries,
@@ -766,6 +835,11 @@ export function patchProWizard(state: ProWizardState, patch: Partial<Omit<ProWiz
   const nextState: ProWizardState = {
     ...state,
     ...patch,
+    step0: {
+      ...state.step0,
+      ...patch.step0,
+      textCritical: patch.step0?.textCritical ?? state.step0.textCritical,
+    },
     selectedLensTypeId: nextLensType,
     selectedLensSeriesId: nextLensSeries,
     lens_profile: nextLensProfile,
