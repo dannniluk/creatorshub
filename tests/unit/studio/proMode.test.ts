@@ -1,12 +1,15 @@
 import { describe, expect, test } from "vitest";
 
 import {
+  PRO_APERTURE_UI,
   DEFAULT_REQUIRED_NEGATIVE_LOCK,
   PRO_APERTURE_PRESETS,
   PRO_FOCAL_UI,
   buildProPrompts,
   createDefaultProWizard,
+  explainAperture,
   explainFocalLength,
+  getRecommendedApertureRule,
   getRecommendedFocalRule,
   mapBlurSliderToAperture,
 } from "@/lib/studio/proMode";
@@ -102,5 +105,28 @@ describe("PRO_FOCAL_UI", () => {
     expect(PRO_FOCAL_UI.options).toHaveLength(8);
     expect(PRO_FOCAL_UI.helperText.ranges).toHaveLength(4);
     expect(PRO_FOCAL_UI.options[0]?.label).toBe("Широко");
+  });
+});
+
+describe("PRO_APERTURE_UI", () => {
+  test("contains helper ranges and 5 presets", () => {
+    expect(PRO_APERTURE_UI.helperText.ranges).toHaveLength(3);
+    expect(PRO_APERTURE_UI.presets).toEqual(["f/2.0", "f/2.8", "f/4", "f/5.6", "f/8"]);
+  });
+});
+
+describe("aperture helpers", () => {
+  test("returns readable RU explanation for aperture presets", () => {
+    expect(explainAperture("f/2.0")).toContain("Сильное размытие");
+    expect(explainAperture("f/4")).toContain("Баланс");
+    expect(explainAperture("f/8")).toContain("Больше деталей");
+  });
+
+  test("returns recommendation by category and goal", () => {
+    const textureRule = getRecommendedApertureRule({ category: "Fashion", goal: "Texture" });
+    expect(textureRule?.recommendedAperture).toBe("f/5.6");
+
+    const portraitRule = getRecommendedApertureRule({ category: "People", goal: "Clean portrait" });
+    expect(portraitRule?.recommendedAperture).toBe("f/2.8");
   });
 });

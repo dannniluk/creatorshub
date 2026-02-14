@@ -17,6 +17,7 @@ import {
 } from "@/lib/studio/catalog";
 import { studioPresetCollectionSchema } from "@/lib/studio/presetSchema";
 import {
+  PRO_APERTURE_UI,
   PRO_APERTURE_PRESETS,
   PRO_CAMERA_OPTIONS,
   PRO_FOCAL_UI,
@@ -27,7 +28,9 @@ import {
   type ProWizardStep,
   clampProStep,
   createDefaultProWizard,
+  explainAperture,
   explainFocalLength,
+  getRecommendedApertureRule,
   getFocalOption,
   getRecommendedFocalRule,
   mapBlurSliderToAperture,
@@ -573,6 +576,11 @@ export default function PromptCopilotApp() {
   const proSelectedFocalOption = getFocalOption(proWizard.focal_mm);
   const proFocalExplanation = explainFocalLength(proWizard.focal_mm);
   const proFocalRecommendation = getRecommendedFocalRule({
+    category: selectedPreset.category,
+    goal: selectedPreset.goal,
+  });
+  const proApertureExplanation = explainAperture(proWizard.aperture);
+  const proApertureRecommendation = getRecommendedApertureRule({
     category: selectedPreset.category,
     goal: selectedPreset.goal,
   });
@@ -1369,7 +1377,23 @@ export default function PromptCopilotApp() {
                         </section>
 
                         <section className="shrink-0 pr-4" style={{ width: `${proSlideWidth}%` }}>
-                          <h3 className="text-sm font-semibold text-zinc-100">4. Настрой диафрагму</h3>
+                          <h3 className="text-sm font-semibold text-zinc-100">4. {PRO_APERTURE_UI.title}</h3>
+                          <p className="mt-2 text-xs text-zinc-400">{PRO_APERTURE_UI.helperText.default}</p>
+                          <div className="mt-2 grid gap-1 sm:grid-cols-2">
+                            {PRO_APERTURE_UI.helperText.ranges.map((item) => (
+                              <p key={item.range} className="text-[11px] text-zinc-500">
+                                <span className="text-zinc-300">{item.range}</span> — {item.text}
+                              </p>
+                            ))}
+                          </div>
+                          {proApertureRecommendation ? (
+                            <div className="mt-3 rounded-xl border border-emerald-300/20 bg-emerald-400/5 p-2.5">
+                              <p className="text-[10px] uppercase tracking-[0.14em] text-emerald-200/80">Рекомендовано для задачи</p>
+                              <p className="mt-1 text-xs text-zinc-100">
+                                {proApertureRecommendation.recommendedAperture}: {proApertureRecommendation.reason}
+                              </p>
+                            </div>
+                          ) : null}
                           <div
                             data-testid="pro-aperture-slider-wrapper"
                             className="mt-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3 touch-none overscroll-contain"
@@ -1417,6 +1441,8 @@ export default function PromptCopilotApp() {
                               </button>
                             ))}
                           </div>
+                          <p className="mt-3 text-xs text-zinc-400">{proApertureExplanation}</p>
+                          <p className="mt-1 text-[11px] text-zinc-500">Выбрано: {proWizard.aperture}</p>
                           <div className="mt-3 flex flex-wrap gap-2">
                             <button
                               data-testid="pro-aperture-back"

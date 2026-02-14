@@ -73,6 +73,28 @@ export type ProFocalUI = {
   recommendationRules: ProFocalRecommendationRule[];
 };
 
+export type ProApertureRecommendationRule = {
+  when: {
+    category?: CreatorCategory | string;
+    goal?: GoalTag | string;
+  };
+  recommendedAperture: (typeof PRO_APERTURE_PRESETS)[number];
+  reason: string;
+};
+
+export type ProApertureUI = {
+  title: string;
+  helperText: {
+    default: string;
+    ranges: Array<{
+      range: string;
+      text: string;
+    }>;
+  };
+  presets: readonly (typeof PRO_APERTURE_PRESETS)[number][];
+  recommendationRules: ProApertureRecommendationRule[];
+};
+
 export const DEFAULT_REQUIRED_NEGATIVE_LOCK = [
   "no watermark",
   "no text",
@@ -337,6 +359,57 @@ export const PRO_FOCAL_OPTIONS = PRO_FOCAL_UI.options.map((option) => option.mm)
 
 export const PRO_APERTURE_PRESETS = ["f/2.0", "f/2.8", "f/4", "f/5.6", "f/8"] as const;
 
+export const PRO_APERTURE_UI: ProApertureUI = {
+  title: "Настрой диафрагму",
+  helperText: {
+    default:
+      "Диафрагма влияет на глубину резкости и на то, сколько света попадает в кадр: открытая — сильнее размывает фон, закрытая — делает сцену более детальной.",
+    ranges: [
+      { range: "f/2.0–f/2.8", text: "Сильное размытие фона, мягкое отделение объекта, больше света." },
+      { range: "f/4", text: "Баланс: объект читается четко, фон остаётся аккуратно отделён." },
+      { range: "f/5.6–f/8", text: "Больше деталей в кадре и глубины, безопасно для каталога/предметки." },
+    ],
+  },
+  presets: PRO_APERTURE_PRESETS,
+  recommendationRules: [
+    {
+      when: { category: "People", goal: "Clean portrait" },
+      recommendedAperture: "f/2.8",
+      reason: "Для чистого портрета f/2.8 даёт мягкое отделение и стабильную резкость на лице.",
+    },
+    {
+      when: { category: "People", goal: "Beauty gloss" },
+      recommendedAperture: "f/4",
+      reason: "В beauty съёмке f/4 даёт аккуратный баланс между текстурой кожи и мягким фоном.",
+    },
+    {
+      when: { category: "Fashion", goal: "Texture" },
+      recommendedAperture: "f/5.6",
+      reason: "Для фактуры ткани f/5.6 помогает сохранить читаемость швов и деталей.",
+    },
+    {
+      when: { category: "Food", goal: "Texture" },
+      recommendedAperture: "f/5.6",
+      reason: "Еда и фактура лучше читаются на f/5.6 без лишнего визуального шума.",
+    },
+    {
+      when: { category: "Product", goal: "Catalog" },
+      recommendedAperture: "f/8",
+      reason: "Каталожный товар безопаснее с f/8: максимум деталей и предсказуемый коммерческий вид.",
+    },
+    {
+      when: { category: "Interiors" },
+      recommendedAperture: "f/8",
+      reason: "Для интерьеров f/8 лучше сохраняет глубину пространства и читаемость плоскостей.",
+    },
+    {
+      when: { goal: "Night mood" },
+      recommendedAperture: "f/2.0",
+      reason: "Ночной mood чаще требует больше света и сильного отделения объекта, поэтому f/2.0.",
+    },
+  ],
+};
+
 export const PRO_LIGHTING_OPTIONS: ProLightingOption[] = [
   {
     label: "Мягкий ключ с деликатным заполнением",
@@ -465,6 +538,31 @@ export function getRecommendedFocalRule(input: {
   return null;
 }
 
+export function getRecommendedApertureRule(input: {
+  category?: CreatorCategory | string | null;
+  goal?: GoalTag | string | null;
+}): ProApertureRecommendationRule | null {
+  const categoryKey = normalizeRuleLookup(input.category);
+  const goalKey = normalizeRuleLookup(input.goal);
+
+  for (const rule of PRO_APERTURE_UI.recommendationRules) {
+    const ruleCategory = normalizeRuleLookup(rule.when.category);
+    const ruleGoal = normalizeRuleLookup(rule.when.goal);
+
+    if (ruleCategory && ruleCategory !== categoryKey) {
+      continue;
+    }
+
+    if (ruleGoal && ruleGoal !== goalKey) {
+      continue;
+    }
+
+    return rule;
+  }
+
+  return null;
+}
+
 export function explainFocalLength(focal: number): string {
   if (focal >= 16 && focal <= 24) {
     return PRO_FOCAL_UI.helperText.ranges[0]?.text ?? PRO_FOCAL_UI.helperText.default;
@@ -483,6 +581,23 @@ export function explainFocalLength(focal: number): string {
   }
 
   return PRO_FOCAL_UI.helperText.default;
+}
+
+export function explainAperture(aperture: string): string {
+  const normalized = aperture.toLowerCase();
+  if (normalized === "f/2.0" || normalized === "f/2.8") {
+    return PRO_APERTURE_UI.helperText.ranges[0]?.text ?? PRO_APERTURE_UI.helperText.default;
+  }
+
+  if (normalized === "f/4") {
+    return PRO_APERTURE_UI.helperText.ranges[1]?.text ?? PRO_APERTURE_UI.helperText.default;
+  }
+
+  if (normalized === "f/5.6" || normalized === "f/8") {
+    return PRO_APERTURE_UI.helperText.ranges[2]?.text ?? PRO_APERTURE_UI.helperText.default;
+  }
+
+  return PRO_APERTURE_UI.helperText.default;
 }
 
 export function mapBlurSliderToAperture(sliderValue: number): (typeof PRO_APERTURE_PRESETS)[number] {
