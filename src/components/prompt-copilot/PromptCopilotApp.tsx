@@ -68,6 +68,7 @@ const STORAGE_KEYS = {
 
 const GALLERY_CHUNK_SIZE = 8;
 const COMPACT_PREVIEW_LINES = 6;
+const PRO_WIZARD_STEPS_TOTAL = 6;
 const REQUIRED_NEGATIVE_CONSTRAINTS = ["no watermark", "no text", "no deformed faces/hands", "no extra fingers", "no artifacts"];
 const FOCUSABLE_SELECTOR =
   'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -854,6 +855,8 @@ export default function PromptCopilotApp() {
     }`;
 
   const galleryImageHeights = ["h-44", "h-72", "h-56", "h-80", "h-52", "h-64"] as const;
+  const proSlideWidth = 100 / PRO_WIZARD_STEPS_TOTAL;
+  const proSlideOffset = (proWizard.step - 1) * proSlideWidth;
 
   return (
     <div className="min-h-screen bg-[#040405] text-zinc-100">
@@ -1168,7 +1171,7 @@ export default function PromptCopilotApp() {
                           <button
                             key={label}
                             type="button"
-                            className={`rounded-xl px-2 py-2 text-[11px] transition ${
+                            className={`h-12 rounded-xl px-2 text-[11px] transition ${
                               isActive
                                 ? "bg-white text-zinc-950"
                                 : isPast
@@ -1187,16 +1190,19 @@ export default function PromptCopilotApp() {
                     <div className="mt-4 overflow-hidden">
                       <div
                         className="flex transition-transform duration-500 ease-out"
-                        style={{ transform: `translateX(-${(proWizard.step - 1) * 100}%)` }}
+                        style={{
+                          width: `${PRO_WIZARD_STEPS_TOTAL * 100}%`,
+                          transform: `translateX(-${proSlideOffset}%)`,
+                        }}
                       >
-                        <section className="min-w-full shrink-0 pr-4">
+                        <section className="shrink-0 pr-4" style={{ width: `${proSlideWidth}%` }}>
                           <h3 className="text-sm font-semibold text-zinc-100">1. Выбери камеру</h3>
                           <div data-testid="pro-step-camera-grid" className="mt-3 grid gap-2 sm:grid-cols-3 xl:grid-cols-4">
                             {PRO_CAMERA_OPTIONS.map((camera) => (
                               <button
                                 key={camera.label}
                                 type="button"
-                                className={`rounded-2xl border p-3 text-left transition ${
+                                className={`flex min-h-[132px] flex-col rounded-2xl border p-3 text-left transition ${
                                   proWizard.camera === camera.label
                                     ? "border-white/40 bg-white/[0.11]"
                                     : "border-white/10 bg-white/[0.03] hover:bg-white/[0.08]"
@@ -1205,7 +1211,7 @@ export default function PromptCopilotApp() {
                               >
                                 <p className="text-sm font-semibold text-zinc-100">{camera.label}</p>
                                 <p className="mt-1 text-[11px] text-zinc-400">{camera.bestFor}</p>
-                                <div className="mt-2 flex flex-wrap gap-1">
+                                <div className="mt-auto flex flex-wrap gap-1 pt-3">
                                   {camera.chips.map((chip) => (
                                     <span key={`${camera.label}-${chip}`} className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] text-zinc-300">
                                       {chip}
@@ -1217,14 +1223,14 @@ export default function PromptCopilotApp() {
                           </div>
                         </section>
 
-                        <section className="min-w-full shrink-0 pr-4">
+                        <section className="shrink-0 pr-4" style={{ width: `${proSlideWidth}%` }}>
                           <h3 className="text-sm font-semibold text-zinc-100">2. Выбери тип объектива</h3>
                           <div data-testid="pro-step-lens-grid" className="mt-3 grid gap-2 sm:grid-cols-3 xl:grid-cols-4">
                             {PRO_LENS_OPTIONS.map((lens) => (
                               <button
                                 key={lens.label}
                                 type="button"
-                                className={`rounded-2xl border p-3 text-left transition ${
+                                className={`flex min-h-[132px] flex-col rounded-2xl border p-3 text-left transition ${
                                   proWizard.lens_profile === lens.label
                                     ? "border-white/40 bg-white/[0.11]"
                                     : "border-white/10 bg-white/[0.03] hover:bg-white/[0.08]"
@@ -1238,14 +1244,14 @@ export default function PromptCopilotApp() {
                           </div>
                         </section>
 
-                        <section className="min-w-full shrink-0 pr-4">
+                        <section className="shrink-0 pr-4" style={{ width: `${proSlideWidth}%` }}>
                           <h3 className="text-sm font-semibold text-zinc-100">3. Выбери фокусное расстояние</h3>
                           <div data-testid="pro-step-focal-grid" className="mt-3 grid grid-cols-4 gap-2">
                             {PRO_FOCAL_OPTIONS.map((focal) => (
                               <button
                                 key={focal}
                                 type="button"
-                                className={`rounded-xl border px-3 py-2 text-sm transition ${
+                                className={`h-16 rounded-xl border px-3 py-2 text-sm transition ${
                                   proWizard.focal_mm === focal
                                     ? "border-white/40 bg-white text-zinc-950"
                                     : "border-white/10 bg-white/[0.04] text-zinc-100 hover:bg-white/[0.1]"
@@ -1259,7 +1265,7 @@ export default function PromptCopilotApp() {
                           <p className="mt-3 text-xs text-zinc-400">{proFocalExplanation}</p>
                         </section>
 
-                        <section className="min-w-full shrink-0 pr-4">
+                        <section className="shrink-0 pr-4" style={{ width: `${proSlideWidth}%` }}>
                           <h3 className="text-sm font-semibold text-zinc-100">4. Настрой диафрагму</h3>
                           <label className="mt-3 block rounded-2xl border border-white/10 bg-white/[0.03] p-3">
                             <span className="text-xs text-zinc-400">Больше размытия ↔ Больше деталей</span>
@@ -1282,7 +1288,7 @@ export default function PromptCopilotApp() {
                               <button
                                 key={aperture}
                                 type="button"
-                                className={`rounded-full border px-3 py-1.5 text-xs transition ${
+                                className={`h-11 rounded-full border px-3 text-xs transition ${
                                   proWizard.aperture === aperture
                                     ? "border-white/40 bg-white text-zinc-950"
                                     : "border-white/10 bg-white/[0.05] text-zinc-100 hover:bg-white/[0.12]"
@@ -1295,14 +1301,14 @@ export default function PromptCopilotApp() {
                           </div>
                         </section>
 
-                        <section className="min-w-full shrink-0 pr-4">
+                        <section className="shrink-0 pr-4" style={{ width: `${proSlideWidth}%` }}>
                           <h3 className="text-sm font-semibold text-zinc-100">5. Выбери свет</h3>
                           <div data-testid="pro-step-light-grid" className="mt-3 grid gap-2 sm:grid-cols-3 xl:grid-cols-4">
                             {PRO_LIGHTING_OPTIONS.map((light) => (
                               <button
                                 key={light.label}
                                 type="button"
-                                className={`rounded-2xl border p-3 text-left transition ${
+                                className={`flex min-h-[132px] flex-col rounded-2xl border p-3 text-left transition ${
                                   proWizard.lighting_style === light.label
                                     ? "border-white/40 bg-white/[0.11]"
                                     : "border-white/10 bg-white/[0.03] hover:bg-white/[0.08]"
@@ -1316,7 +1322,7 @@ export default function PromptCopilotApp() {
                           </div>
                         </section>
 
-                        <section className="min-w-full shrink-0 pr-4">
+                        <section className="shrink-0 pr-4" style={{ width: `${proSlideWidth}%` }}>
                           <h3 className="text-sm font-semibold text-zinc-100">6. Финал</h3>
                           <article className="mt-3 rounded-2xl border border-white/10 bg-[#090b10] p-4">
                             <p className="text-sm font-semibold text-zinc-100">Вы выбрали</p>
