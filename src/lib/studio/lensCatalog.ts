@@ -1,4 +1,5 @@
 import type { CreatorCategory, GoalTag } from "@/lib/studio/catalog";
+import nanoBananaProConfig from "@/lib/studio/config/nano-banana-pro.ru.json";
 
 export type LensTypeId =
   | "spherical_prime"
@@ -73,6 +74,39 @@ export type LensDerivedInput = {
   typeId: LensTypeId;
   seriesId: string | null;
   availableFocals: number[];
+};
+
+type ConfigLensTypeId =
+  | "spherical_prime"
+  | "clean_premium_prime"
+  | "anamorphic"
+  | "macro_100"
+  | "telephoto_prime"
+  | "wide_prime"
+  | "vintage_soft"
+  | "zoom_doc";
+
+type ConfigLensSeries = {
+  id: string;
+  typeId: ConfigLensTypeId;
+  title: string;
+  tags: string[];
+  bias: {
+    flare: number;
+    softness: number;
+    cleanliness: number;
+  };
+};
+
+const CONFIG_TYPE_TO_INTERNAL: Record<ConfigLensTypeId, LensTypeId> = {
+  spherical_prime: "spherical_prime",
+  clean_premium_prime: "clean_premium",
+  anamorphic: "anamorphic",
+  macro_100: "macro",
+  telephoto_prime: "tele",
+  wide_prime: "wide",
+  vintage_soft: "vintage_soft",
+  zoom_doc: "zoom_doc",
 };
 
 const APERTURE_NUMERIC_ORDER = [2.0, 2.8, 4, 5.6, 8] as const;
@@ -266,6 +300,22 @@ export const LENS_TYPES: LensTypeDefinition[] = [
   },
 ];
 
+const schemaLensTypes = nanoBananaProConfig.lensCatalog?.lensTypes ?? [];
+for (const schemaType of schemaLensTypes) {
+  const internalType = CONFIG_TYPE_TO_INTERNAL[schemaType.id as ConfigLensTypeId];
+  if (!internalType) {
+    continue;
+  }
+
+  const existing = LENS_TYPES.find((item) => item.id === internalType);
+  if (!existing) {
+    continue;
+  }
+
+  existing.title = schemaType.title || existing.title;
+  existing.tags = schemaType.tags?.length ? [...schemaType.tags] : existing.tags;
+}
+
 export const LENS_SERIES: LensSeriesDefinition[] = [
   {
     id: "spherical_canon_cn_e_prime",
@@ -456,6 +506,42 @@ export const LENS_SERIES: LensSeriesDefinition[] = [
     bias: { flare: 0.55, softness: 0.6, cleanliness: 0.55, look: "гибкий budget cinema-zoom", apertureShiftStops: -0.2 },
   },
 ];
+
+const schemaLensSeries = (nanoBananaProConfig.lensCatalog?.lensSeries ?? []) as ConfigLensSeries[];
+for (const schemaSeries of schemaLensSeries) {
+  const internalType = CONFIG_TYPE_TO_INTERNAL[schemaSeries.typeId];
+  if (!internalType) {
+    continue;
+  }
+
+  const existing = LENS_SERIES.find((item) => item.id === schemaSeries.id);
+  if (existing) {
+    existing.typeId = internalType;
+    existing.title = schemaSeries.title || existing.title;
+    existing.tags = schemaSeries.tags?.length ? [...schemaSeries.tags] : existing.tags;
+    existing.bias = {
+      ...existing.bias,
+      flare: schemaSeries.bias.flare,
+      softness: schemaSeries.bias.softness,
+      cleanliness: schemaSeries.bias.cleanliness,
+    };
+    continue;
+  }
+
+  LENS_SERIES.push({
+    id: schemaSeries.id,
+    typeId: internalType,
+    title: schemaSeries.title,
+    description: `Профессиональная серия ${schemaSeries.title}.`,
+    tags: schemaSeries.tags ?? [],
+    bias: {
+      flare: schemaSeries.bias.flare,
+      softness: schemaSeries.bias.softness,
+      cleanliness: schemaSeries.bias.cleanliness,
+      look: (schemaSeries.tags ?? []).slice(0, 2).join(" · ") || schemaSeries.title,
+    },
+  });
+}
 
 export function getLensType(typeId: LensTypeId): LensTypeDefinition {
   return LENS_TYPES.find((item) => item.id === typeId) ?? LENS_TYPES[0]!;

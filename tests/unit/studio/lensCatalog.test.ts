@@ -52,6 +52,7 @@ describe("lensCatalog", () => {
   test("returns series list for lens type", () => {
     const series = getLensSeriesByType("clean_premium");
     expect(series.length).toBeGreaterThanOrEqual(3);
+    expect(series.some((item) => item.id === "zeiss_supreme")).toBe(true);
   });
 
   test("recommends lens type by category/goal context", () => {
