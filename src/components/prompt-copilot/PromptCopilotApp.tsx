@@ -19,7 +19,7 @@ import { studioPresetCollectionSchema } from "@/lib/studio/presetSchema";
 import {
   PRO_APERTURE_PRESETS,
   PRO_CAMERA_OPTIONS,
-  PRO_FOCAL_OPTIONS,
+  PRO_FOCAL_UI,
   PRO_LIGHTING_OPTIONS,
   PRO_LENS_OPTIONS,
   PRO_LOCK_TEXT,
@@ -28,6 +28,8 @@ import {
   clampProStep,
   createDefaultProWizard,
   explainFocalLength,
+  getFocalOption,
+  getRecommendedFocalRule,
   mapBlurSliderToAperture,
   nextProStep,
   patchProWizard,
@@ -567,7 +569,12 @@ export default function PromptCopilotApp() {
     ? buildPresetPromptPreview({ preset: activePostCopyPreset, setup: buildSetupForPreset(activePostCopyPreset) })
     : null;
   const proPromptPreview = proWizard.output;
+  const proSelectedFocalOption = getFocalOption(proWizard.focal_mm);
   const proFocalExplanation = explainFocalLength(proWizard.focal_mm);
+  const proFocalRecommendation = getRecommendedFocalRule({
+    category: selectedPreset.category,
+    goal: selectedPreset.goal,
+  });
 
   useFocusTrap({
     active: Boolean(activeDetailsPreset),
@@ -1245,24 +1252,60 @@ export default function PromptCopilotApp() {
                         </section>
 
                         <section className="shrink-0 pr-4" style={{ width: `${proSlideWidth}%` }}>
-                          <h3 className="text-sm font-semibold text-zinc-100">3. Выбери фокусное расстояние</h3>
-                          <div data-testid="pro-step-focal-grid" className="mt-3 grid grid-cols-4 gap-2">
-                            {PRO_FOCAL_OPTIONS.map((focal) => (
+                          <h3 className="text-sm font-semibold text-zinc-100">3. {PRO_FOCAL_UI.title}</h3>
+                          <p className="mt-2 text-xs text-zinc-400">{PRO_FOCAL_UI.helperText.default}</p>
+                          <div className="mt-2 grid gap-1 sm:grid-cols-2">
+                            {PRO_FOCAL_UI.helperText.ranges.map((item) => (
+                              <p key={item.range} className="text-[11px] text-zinc-500">
+                                <span className="text-zinc-300">{item.range}</span> — {item.text}
+                              </p>
+                            ))}
+                          </div>
+                          {proFocalRecommendation ? (
+                            <div className="mt-3 rounded-xl border border-emerald-300/20 bg-emerald-400/5 p-2.5">
+                              <p className="text-[10px] uppercase tracking-[0.14em] text-emerald-200/80">Рекомендовано для задачи</p>
+                              <p className="mt-1 text-xs text-zinc-100">
+                                {proFocalRecommendation.recommendedMm} мм: {proFocalRecommendation.reason}
+                              </p>
+                            </div>
+                          ) : null}
+                          <div data-testid="pro-step-focal-grid" className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                            {PRO_FOCAL_UI.options.map((option) => (
                               <button
-                                key={focal}
+                                key={option.mm}
                                 type="button"
-                                className={`h-16 rounded-xl border px-3 py-2 text-sm transition ${
-                                  proWizard.focal_mm === focal
+                                className={`flex min-h-[132px] flex-col rounded-2xl border p-3 text-left transition ${
+                                  proWizard.focal_mm === option.mm
                                     ? "border-white/40 bg-white text-zinc-950"
-                                    : "border-white/10 bg-white/[0.04] text-zinc-100 hover:bg-white/[0.1]"
+                                    : "border-white/10 bg-white/[0.03] text-zinc-100 hover:bg-white/[0.08]"
                                 }`}
-                                onClick={() => handleProFocalSelect(focal)}
+                                onClick={() => handleProFocalSelect(option.mm)}
                               >
-                                {focal}
+                                <p className="text-sm font-semibold">
+                                  {option.mm} мм · {option.label}
+                                </p>
+                                <p className={`mt-1 text-[11px] ${proWizard.focal_mm === option.mm ? "text-zinc-700" : "text-zinc-400"}`}>{option.description}</p>
+                                <div className="mt-auto flex flex-wrap gap-1 pt-3">
+                                  {option.bestFor.slice(0, 3).map((chip) => (
+                                    <span
+                                      key={`${option.mm}-${chip}`}
+                                      className={`rounded-full px-2 py-0.5 text-[10px] ${
+                                        proWizard.focal_mm === option.mm ? "bg-zinc-900/10 text-zinc-700" : "bg-white/10 text-zinc-300"
+                                      }`}
+                                    >
+                                      {chip}
+                                    </span>
+                                  ))}
+                                </div>
                               </button>
                             ))}
                           </div>
                           <p className="mt-3 text-xs text-zinc-400">{proFocalExplanation}</p>
+                          {proSelectedFocalOption ? (
+                            <p className="mt-1 text-[11px] text-zinc-500">
+                              Выбрано: {proSelectedFocalOption.mm} мм ({proSelectedFocalOption.label})
+                            </p>
+                          ) : null}
                         </section>
 
                         <section className="shrink-0 pr-4" style={{ width: `${proSlideWidth}%` }}>

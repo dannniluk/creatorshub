@@ -1,4 +1,4 @@
-import type { CreatorCategory, PresetLocks, StudioTaskPreset } from "@/lib/studio/catalog";
+import type { CreatorCategory, GoalTag, PresetLocks, StudioTaskPreset } from "@/lib/studio/catalog";
 
 export type ProWizardStep = 1 | 2 | 3 | 4 | 5 | 6;
 
@@ -40,6 +40,37 @@ export type ProLensOption = {
 export type ProLightingOption = {
   label: string;
   bestFor: string;
+};
+
+export type ProFocalOption = {
+  mm: number;
+  label: string;
+  bestFor: string[];
+  description: string;
+  group: "wide" | "standard" | "portrait" | "macro" | "tele";
+  defaultWhen: string[];
+};
+
+export type ProFocalRecommendationRule = {
+  when: {
+    category?: CreatorCategory | string;
+    goal?: GoalTag | string;
+  };
+  recommendedMm: number;
+  reason: string;
+};
+
+export type ProFocalUI = {
+  title: string;
+  helperText: {
+    default: string;
+    ranges: Array<{
+      range: string;
+      text: string;
+    }>;
+  };
+  options: ProFocalOption[];
+  recommendationRules: ProFocalRecommendationRule[];
 };
 
 export const DEFAULT_REQUIRED_NEGATIVE_LOCK = [
@@ -184,7 +215,125 @@ export const PRO_LENS_OPTIONS: ProLensOption[] = [
   },
 ];
 
-export const PRO_FOCAL_OPTIONS = [16, 24, 35, 50, 85, 105, 135, 200] as const;
+export const PRO_FOCAL_UI: ProFocalUI = {
+  title: "Выбери фокусное расстояние",
+  helperText: {
+    default:
+      "Фокусное влияет на «ощущение дистанции»: широко показывает окружение, длинное — сильнее отделяет и «сжимает» фон.",
+    ranges: [
+      { range: "16–24 мм", text: "Больше пространства и окружения." },
+      { range: "35–50 мм", text: "Универсально и естественно." },
+      { range: "85–105 мм", text: "Портрет/детали, красивое отделение." },
+      { range: "135–200 мм", text: "Дальний план, сильная компрессия фона." },
+    ],
+  },
+  options: [
+    {
+      mm: 16,
+      label: "Широко",
+      bestFor: ["интерьеры", "establishing", "окружение героя"],
+      description: "Максимум пространства, сильная перспектива.",
+      group: "wide",
+      defaultWhen: ["Interiors", "Establishing"],
+    },
+    {
+      mm: 24,
+      label: "Пространство",
+      bestFor: ["мода в локации", "контент", "сцена с окружением"],
+      description: "Широко, но без экстремальных искажений.",
+      group: "wide",
+      defaultWhen: ["Fashion", "Interiors"],
+    },
+    {
+      mm: 35,
+      label: "Кино-универсал",
+      bestFor: ["лайфстайл", "репортаж", "сторителлинг"],
+      description: "Естественно и кинематографично, самый удобный универсал.",
+      group: "standard",
+      defaultWhen: ["Lifestyle", "Documentary"],
+    },
+    {
+      mm: 50,
+      label: "Натурально",
+      bestFor: ["каталожка", "продукт", "портрет по пояс"],
+      description: "Натуральные пропорции, минимум искажений.",
+      group: "standard",
+      defaultWhen: ["Catalog", "Product"],
+    },
+    {
+      mm: 85,
+      label: "Портрет",
+      bestFor: ["крупный портрет", "премиум look", "separation"],
+      description: "Классический портрет: приятно отделяет от фона.",
+      group: "portrait",
+      defaultWhen: ["CleanPortrait", "People"],
+    },
+    {
+      mm: 105,
+      label: "Макро/деталь",
+      bestFor: ["фактура ткани", "швы", "еда", "beauty-деталь"],
+      description: "Лучшее для фактуры и деталей без визуального шума.",
+      group: "macro",
+      defaultWhen: ["Texture", "Food", "BeautyGloss"],
+    },
+    {
+      mm: 135,
+      label: "Дальний",
+      bestFor: ["телепортрет", "компрессия", "дорогой look"],
+      description: "Сильнее «сжимает» фон, добавляет премиальности.",
+      group: "tele",
+      defaultWhen: ["NightMood", "CinematicDrama"],
+    },
+    {
+      mm: 200,
+      label: "Очень дальний",
+      bestFor: ["спорт/сцена", "стрит издалека", "макс. компрессия"],
+      description: "Для дальних сцен и максимального отделения.",
+      group: "tele",
+      defaultWhen: ["Sports", "Stage"],
+    },
+  ],
+  recommendationRules: [
+    {
+      when: { category: "Fashion", goal: "Texture" },
+      recommendedMm: 105,
+      reason:
+        "Для фактуры ткани важны читаемость швов и рельеф — 105 мм даёт нужную детализацию и спокойный фон.",
+    },
+    {
+      when: { category: "People", goal: "CleanPortrait" },
+      recommendedMm: 85,
+      reason: "85 мм — классический портрет: приятная перспектива и отделение от фона.",
+    },
+    {
+      when: { category: "People", goal: "BeautyGloss" },
+      recommendedMm: 105,
+      reason: "105 мм помогает снимать бьюти-детали и текстуру кожи аккуратно и крупно.",
+    },
+    {
+      when: { category: "Food", goal: "Texture" },
+      recommendedMm: 105,
+      reason: "Для еды и деталей поверхности 105 мм даёт макро-читабельность без лишних искажений.",
+    },
+    {
+      when: { category: "Interiors" },
+      recommendedMm: 16,
+      reason: "Интерьеры и пространство лучше читаются на широких фокусных.",
+    },
+    {
+      when: { category: "Product", goal: "Catalog" },
+      recommendedMm: 50,
+      reason: "50 мм даёт натуральные пропорции и стабильный коммерческий вид для товара.",
+    },
+    {
+      when: { goal: "NightMood" },
+      recommendedMm: 135,
+      reason: "Длинное фокусное даёт компрессию и помогает изолировать объект в ночном mood.",
+    },
+  ],
+};
+
+export const PRO_FOCAL_OPTIONS = PRO_FOCAL_UI.options.map((option) => option.mm);
 
 export const PRO_APERTURE_PRESETS = ["f/2.0", "f/2.8", "f/4", "f/5.6", "f/8"] as const;
 
@@ -278,28 +427,62 @@ export function prevProStep(step: ProWizardStep): ProWizardStep {
   return toStep(step - 1);
 }
 
+function normalizeRuleLookup(value: string | null | undefined): string {
+  return (value ?? "")
+    .toLowerCase()
+    .replaceAll(" ", "")
+    .replaceAll("-", "")
+    .replaceAll("_", "")
+    .replaceAll("/", "");
+}
+
+export function getFocalOption(focalMm: number): ProFocalOption | null {
+  return PRO_FOCAL_UI.options.find((option) => option.mm === focalMm) ?? null;
+}
+
+export function getRecommendedFocalRule(input: {
+  category?: CreatorCategory | string | null;
+  goal?: GoalTag | string | null;
+}): ProFocalRecommendationRule | null {
+  const categoryKey = normalizeRuleLookup(input.category);
+  const goalKey = normalizeRuleLookup(input.goal);
+
+  for (const rule of PRO_FOCAL_UI.recommendationRules) {
+    const ruleCategory = normalizeRuleLookup(rule.when.category);
+    const ruleGoal = normalizeRuleLookup(rule.when.goal);
+
+    if (ruleCategory && ruleCategory !== categoryKey) {
+      continue;
+    }
+
+    if (ruleGoal && ruleGoal !== goalKey) {
+      continue;
+    }
+
+    return rule;
+  }
+
+  return null;
+}
+
 export function explainFocalLength(focal: number): string {
-  if (focal === 16 || focal === 24) {
-    return "широко, больше окружения";
+  if (focal >= 16 && focal <= 24) {
+    return PRO_FOCAL_UI.helperText.ranges[0]?.text ?? PRO_FOCAL_UI.helperText.default;
   }
 
-  if (focal === 35) {
-    return "репортажно-киношный универсал";
+  if (focal >= 35 && focal <= 50) {
+    return PRO_FOCAL_UI.helperText.ranges[1]?.text ?? PRO_FOCAL_UI.helperText.default;
   }
 
-  if (focal === 50) {
-    return "натуральная перспектива";
+  if (focal >= 85 && focal <= 105) {
+    return PRO_FOCAL_UI.helperText.ranges[2]?.text ?? PRO_FOCAL_UI.helperText.default;
   }
 
-  if (focal === 85) {
-    return "классический портрет";
+  if (focal >= 135 && focal <= 200) {
+    return PRO_FOCAL_UI.helperText.ranges[3]?.text ?? PRO_FOCAL_UI.helperText.default;
   }
 
-  if (focal === 105) {
-    return "макро/детали и фактура";
-  }
-
-  return "дальний, сильная компрессия";
+  return PRO_FOCAL_UI.helperText.default;
 }
 
 export function mapBlurSliderToAperture(sliderValue: number): (typeof PRO_APERTURE_PRESETS)[number] {

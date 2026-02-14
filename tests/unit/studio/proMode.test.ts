@@ -3,9 +3,11 @@ import { describe, expect, test } from "vitest";
 import {
   DEFAULT_REQUIRED_NEGATIVE_LOCK,
   PRO_APERTURE_PRESETS,
+  PRO_FOCAL_UI,
   buildProPrompts,
   createDefaultProWizard,
   explainFocalLength,
+  getRecommendedFocalRule,
   mapBlurSliderToAperture,
 } from "@/lib/studio/proMode";
 
@@ -67,13 +69,38 @@ describe("aperture slider mapping", () => {
 
 describe("explainFocalLength", () => {
   test("returns readable RU explanations for focal chips", () => {
-    expect(explainFocalLength(16)).toBe("широко, больше окружения");
-    expect(explainFocalLength(24)).toBe("широко, больше окружения");
-    expect(explainFocalLength(35)).toBe("репортажно-киношный универсал");
-    expect(explainFocalLength(50)).toBe("натуральная перспектива");
-    expect(explainFocalLength(85)).toBe("классический портрет");
-    expect(explainFocalLength(105)).toBe("макро/детали и фактура");
-    expect(explainFocalLength(135)).toBe("дальний, сильная компрессия");
-    expect(explainFocalLength(200)).toBe("дальний, сильная компрессия");
+    expect(explainFocalLength(16)).toBe("Больше пространства и окружения.");
+    expect(explainFocalLength(24)).toBe("Больше пространства и окружения.");
+    expect(explainFocalLength(35)).toBe("Универсально и естественно.");
+    expect(explainFocalLength(50)).toBe("Универсально и естественно.");
+    expect(explainFocalLength(85)).toBe("Портрет/детали, красивое отделение.");
+    expect(explainFocalLength(105)).toBe("Портрет/детали, красивое отделение.");
+    expect(explainFocalLength(135)).toBe("Дальний план, сильная компрессия фона.");
+    expect(explainFocalLength(200)).toBe("Дальний план, сильная компрессия фона.");
+  });
+});
+
+describe("focal recommendation rules", () => {
+  test("matches category + goal and supports goal aliases", () => {
+    const peopleRule = getRecommendedFocalRule({ category: "People", goal: "Clean portrait" });
+    expect(peopleRule?.recommendedMm).toBe(85);
+
+    const beautyRule = getRecommendedFocalRule({ category: "People", goal: "BeautyGloss" });
+    expect(beautyRule?.recommendedMm).toBe(105);
+
+    const interiorsRule = getRecommendedFocalRule({ category: "Interiors", goal: "Catalog" });
+    expect(interiorsRule?.recommendedMm).toBe(16);
+  });
+
+  test("returns null when no rule matches", () => {
+    expect(getRecommendedFocalRule({ category: "Food", goal: "Catalog" })).toBeNull();
+  });
+});
+
+describe("PRO_FOCAL_UI", () => {
+  test("contains 8 focal options with helper ranges", () => {
+    expect(PRO_FOCAL_UI.options).toHaveLength(8);
+    expect(PRO_FOCAL_UI.helperText.ranges).toHaveLength(4);
+    expect(PRO_FOCAL_UI.options[0]?.label).toBe("Широко");
   });
 });
