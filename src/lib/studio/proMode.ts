@@ -1,4 +1,10 @@
 import type { CreatorCategory, GoalTag, PresetLocks, StudioTaskPreset } from "@/lib/studio/catalog";
+import {
+  buildLensProfileLabel,
+  getLensSeries,
+  type LensTypeId,
+  resolveLensTypeIdFromProfile,
+} from "@/lib/studio/lensCatalog";
 
 export type ProWizardStep = 1 | 2 | 3 | 4 | 5 | 6;
 
@@ -16,6 +22,8 @@ export type ProWizardOutput = {
 export type ProWizardState = {
   step: ProWizardStep;
   camera: string;
+  selectedLensTypeId: LensTypeId;
+  selectedLensSeriesId: string | null;
   lens_profile: string;
   focal_mm: number;
   aperture: string;
@@ -33,8 +41,10 @@ export type ProCameraOption = {
 };
 
 export type ProLensOption = {
+  id: LensTypeId;
   label: string;
   effect: string;
+  tags: string[];
 };
 
 export type ProLightingOption = {
@@ -204,36 +214,52 @@ export const PRO_CAMERA_OPTIONS: ProCameraOption[] = [
 
 export const PRO_LENS_OPTIONS: ProLensOption[] = [
   {
+    id: "spherical_prime",
     label: "Spherical Prime",
     effect: "чистая геометрия, универсальный кино-look",
+    tags: ["Универсал", "Кино", "Чисто"],
   },
   {
+    id: "clean_premium",
     label: "Master Prime (clean premium)",
     effect: "премиальная резкость и кожа",
+    tags: ["Премиум", "Резкость", "Кожа"],
   },
   {
+    id: "anamorphic",
     label: "Anamorphic",
     effect: "кино-стрейч и характерные блики",
+    tags: ["Блики", "Кино", "Характер"],
   },
   {
+    id: "macro",
     label: "Macro 100mm",
     effect: "фактура, детали, крупные планы",
+    tags: ["Деталь", "Фактура", "Крупно"],
   },
   {
+    id: "tele",
     label: "Telephoto Prime",
     effect: "сильная компрессия и отделение",
+    tags: ["Компрессия", "Портрет", "Отделение"],
   },
   {
+    id: "wide",
     label: "Wide Prime",
     effect: "пространство и окружение",
+    tags: ["Широко", "Окружение", "Локация"],
   },
   {
+    id: "vintage_soft",
     label: "Vintage / Soft",
     effect: "мягкость, характер, меньше цифровой резкости",
+    tags: ["Мягко", "Характер", "Ностальгия"],
   },
   {
+    id: "zoom_doc",
     label: "Zoom (doc)",
     effect: "гибкость и скорость для run&gun",
+    tags: ["Док", "Скорость", "Гибкость"],
   },
 ];
 
@@ -677,6 +703,8 @@ export function buildProPrompts(state: Pick<
 
 type ProWizardSeed = {
   camera?: string;
+  selectedLensTypeId?: LensTypeId;
+  selectedLensSeriesId?: string | null;
   lens_profile?: string;
   focal_mm?: number;
   aperture?: string;
@@ -695,10 +723,17 @@ export function createDefaultProWizard(seed?: ProWizardSeed): ProWizardState {
     negativeLock: [...DEFAULT_REQUIRED_NEGATIVE_LOCK],
   };
 
+  const lensType = seed?.selectedLensTypeId ?? resolveLensTypeIdFromProfile(seed?.lens_profile) ?? "spherical_prime";
+  const seriesCandidate = seed?.selectedLensSeriesId ?? null;
+  const lensSeries = seriesCandidate && getLensSeries(seriesCandidate)?.typeId === lensType ? seriesCandidate : null;
+  const lensProfile = seed?.lens_profile ?? buildLensProfileLabel(lensType, lensSeries);
+
   const state: ProWizardState = {
     step: seed?.step ?? 1,
     camera: seed?.camera ?? "Digital Full Frame",
-    lens_profile: seed?.lens_profile ?? "Spherical Prime",
+    selectedLensTypeId: lensType,
+    selectedLensSeriesId: lensSeries,
+    lens_profile: lensProfile,
     focal_mm: seed?.focal_mm ?? 50,
     aperture: seed?.aperture ?? "f/2.8",
     lighting_style: seed?.lighting_style ?? "Мягкий ключ с деликатным заполнением",
@@ -722,9 +757,18 @@ export function createDefaultProWizard(seed?: ProWizardSeed): ProWizardState {
 }
 
 export function patchProWizard(state: ProWizardState, patch: Partial<Omit<ProWizardState, "output">>): ProWizardState {
+  const nextLensType = patch.selectedLensTypeId ?? state.selectedLensTypeId;
+  const patchSeriesProvided = Object.prototype.hasOwnProperty.call(patch, "selectedLensSeriesId");
+  const candidateSeries = patchSeriesProvided ? patch.selectedLensSeriesId ?? null : state.selectedLensSeriesId;
+  const nextLensSeries = candidateSeries && getLensSeries(candidateSeries)?.typeId === nextLensType ? candidateSeries : null;
+  const nextLensProfile = patch.lens_profile ?? buildLensProfileLabel(nextLensType, nextLensSeries);
+
   const nextState: ProWizardState = {
     ...state,
     ...patch,
+    selectedLensTypeId: nextLensType,
+    selectedLensSeriesId: nextLensSeries,
+    lens_profile: nextLensProfile,
     locks: {
       ...state.locks,
       ...patch.locks,

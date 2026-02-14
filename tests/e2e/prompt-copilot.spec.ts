@@ -42,7 +42,7 @@ test("studio beginner flow: card grid -> copy -> compact sheet -> pro", async ({
   await expect(page.getByTestId("pro-current-setup")).toBeVisible();
   await page.getByTestId("pro-step-camera-grid").getByRole("button", { name: /Digital Full Frame/ }).click();
   await expect(page.getByText("Шаг 2 / 6")).toBeVisible();
-  await expect(page.getByTestId("pro-step-lens-grid").locator("button")).toHaveCount(8);
+  await expect(page.locator('[data-testid^="pro-lens-type-"]')).toHaveCount(8);
   await expect(page.getByTestId("pro-step-lens-grid").getByText("Spherical Prime")).toBeVisible();
   await page.getByRole("button", { name: "Минималистичный режим" }).click();
   await expect(page.getByTestId("pro-wizard")).toHaveCount(0);
@@ -77,6 +77,8 @@ test("pro aperture slider does not auto-advance and uses explicit next/back cont
 
   await page.getByTestId("pro-step-camera-grid").getByRole("button", { name: /Digital Full Frame/ }).click();
   await page.getByTestId("pro-step-lens-grid").getByRole("button", { name: /Spherical Prime/ }).click();
+  await expect(page.getByTestId("pro-lens-series-modal")).toBeVisible();
+  await page.getByTestId("pro-lens-skip-type").click();
   await page.getByTestId("pro-step-focal-grid").getByRole("button", { name: /50 мм/ }).click();
 
   await expect(page.getByText("Шаг 4 / 6")).toBeVisible();
@@ -105,4 +107,26 @@ test("pro aperture slider does not auto-advance and uses explicit next/back cont
 
   await page.getByTestId("pro-aperture-next").click();
   await expect(page.getByText("Шаг 5 / 6")).toBeVisible();
+});
+
+test("pro lens type supports optional series and filters focal options", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.clear();
+  });
+
+  await page.goto("/");
+  await page.getByTestId("tab-studio").click();
+  await page.getByRole("button", { name: "Pro режим" }).click();
+
+  await page.getByTestId("pro-step-camera-grid").getByRole("button", { name: /Digital Full Frame/ }).click();
+  await page.getByTestId("pro-step-lens-grid").getByRole("button", { name: /Telephoto Prime/ }).click();
+  await expect(page.getByTestId("pro-lens-series-modal")).toBeVisible();
+
+  await page.getByTestId("pro-lens-series-tele_leica_summicron_c").click();
+  await page.getByTestId("pro-lens-confirm-series").click();
+
+  await expect(page.getByText("Шаг 3 / 6")).toBeVisible();
+  await expect(page.getByTestId("pro-step-focal-grid").getByText("24 мм")).toHaveCount(0);
+  await expect(page.getByTestId("pro-step-focal-grid").getByText("105 мм")).toBeVisible();
+  await expect(page.getByText(/Telephoto Prime: рекомендовано 105 мм/)).toBeVisible();
 });

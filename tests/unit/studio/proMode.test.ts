@@ -20,6 +20,8 @@ describe("createDefaultProWizard", () => {
 
     expect(wizard.step).toBe(1);
     expect(wizard.camera).toBe("Digital Full Frame");
+    expect(wizard.selectedLensTypeId).toBe("spherical_prime");
+    expect(wizard.selectedLensSeriesId).toBeNull();
     expect(wizard.locks.characterLock).toBe(true);
     expect(wizard.locks.styleLock).toBe(true);
     expect(wizard.locks.compositionLock).toBe(true);

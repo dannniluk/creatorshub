@@ -22,7 +22,6 @@ import {
   PRO_CAMERA_OPTIONS,
   PRO_FOCAL_UI,
   PRO_LIGHTING_OPTIONS,
-  PRO_LENS_OPTIONS,
   PRO_LOCK_TEXT,
   type ProWizardState,
   type ProWizardStep,
@@ -39,6 +38,17 @@ import {
   prevProStep,
   withTaskSceneDefaults,
 } from "@/lib/studio/proMode";
+import {
+  buildLensProfileLabel,
+  deriveLensRecommendations,
+  getLensSeries,
+  getLensSeriesByType,
+  getLensType,
+  LENS_TYPES,
+  recommendLensTypeByContext,
+  resolveLensTypeIdFromProfile,
+  type LensTypeId,
+} from "@/lib/studio/lensCatalog";
 import type { Core6Setup, GalleryPreset, PromptPack, PromptPackVariant, StudioSetup } from "@/lib/studio/types";
 
 type TabKey = "gallery" | "studio" | "packs" | "reference";
@@ -410,6 +420,8 @@ export default function PromptCopilotApp() {
     const restored = patchProWizard(createDefaultProWizard(), {
       step: clampProStep(Number(stored.step ?? 1)),
       camera: stored.camera,
+      selectedLensTypeId: stored.selectedLensTypeId,
+      selectedLensSeriesId: stored.selectedLensSeriesId,
       lens_profile: stored.lens_profile,
       focal_mm: stored.focal_mm,
       aperture: stored.aperture,
@@ -424,6 +436,7 @@ export default function PromptCopilotApp() {
   const [proPromptMode, setProPromptMode] = useState<PromptMode>("compact");
   const [proAdvancedOpen, setProAdvancedOpen] = useState(false);
   const [isInteractingWithControl, setIsInteractingWithControl] = useState(false);
+  const [proLensSeriesModal, setProLensSeriesModal] = useState<{ typeId: LensTypeId; pendingSeriesId: string | null } | null>(null);
   const [proApertureSliderValue, setProApertureSliderValue] = useState(() => apertureToSliderValue(createDefaultProWizard().aperture));
   const [detailsPresetId, setDetailsPresetId] = useState<string | null>(null);
   const [detailsPromptMode, setDetailsPromptMode] = useState<PromptMode>("compact");
@@ -438,6 +451,7 @@ export default function PromptCopilotApp() {
   const detailsPanelRef = useRef<HTMLDivElement | null>(null);
   const postCopyPanelRef = useRef<HTMLDivElement | null>(null);
   const proPromptDrawerRef = useRef<HTMLDivElement | null>(null);
+  const proLensSeriesModalRef = useRef<HTMLDivElement | null>(null);
 
   const [packs, setPacks] = useState<PromptPack[]>(() => {
     if (typeof window === "undefined") {
@@ -572,6 +586,19 @@ export default function PromptCopilotApp() {
   const activePostCopyPreview = activePostCopyPreset
     ? buildPresetPromptPreview({ preset: activePostCopyPreset, setup: buildSetupForPreset(activePostCopyPreset) })
     : null;
+
+  const allFocalOptions = PRO_FOCAL_UI.options.map((option) => option.mm);
+  const activeLensType = getLensType(proWizard.selectedLensTypeId);
+  const activeLensSeries = getLensSeries(proWizard.selectedLensSeriesId);
+  const proLensDerived = deriveLensRecommendations({
+    typeId: activeLensType.id,
+    seriesId: activeLensSeries?.typeId === activeLensType.id ? activeLensSeries.id : null,
+    availableFocals: allFocalOptions,
+  });
+  const proFilteredFocalOptions = PRO_FOCAL_UI.options.filter((option) => proLensDerived.focalOptions.includes(option.mm));
+  const lensModalType = proLensSeriesModal ? getLensType(proLensSeriesModal.typeId) : null;
+  const lensModalSeries = lensModalType ? getLensSeriesByType(lensModalType.id) : [];
+
   const proPromptPreview = proWizard.output;
   const proSelectedFocalOption = getFocalOption(proWizard.focal_mm);
   const proFocalExplanation = explainFocalLength(proWizard.focal_mm);
@@ -601,6 +628,12 @@ export default function PromptCopilotApp() {
     active: proPromptDrawerOpen,
     containerRef: proPromptDrawerRef,
     onEscape: () => setProPromptDrawerOpen(false),
+  });
+
+  useFocusTrap({
+    active: Boolean(proLensSeriesModal),
+    containerRef: proLensSeriesModalRef,
+    onEscape: () => setProLensSeriesModal(null),
   });
 
   useEffect(() => {
@@ -747,17 +780,29 @@ export default function PromptCopilotApp() {
 
   const openProFromPreset = (preset: StudioTaskPreset) => {
     selectTaskPreset(preset);
+    const initialLensTypeId =
+      resolveLensTypeIdFromProfile(preset.defaults.lens_profile) ??
+      recommendLensTypeByContext({ category: preset.category, goal: preset.goal });
+    const initialLensDerived = deriveLensRecommendations({
+      typeId: initialLensTypeId,
+      seriesId: null,
+      availableFocals: allFocalOptions,
+    });
+
     const baseWizard = createDefaultProWizard({
       step: 1,
       camera: preset.defaults.camera,
-      lens_profile: preset.defaults.lens_profile,
-      focal_mm: preset.defaults.focal_mm,
-      aperture: preset.defaults.aperture,
+      selectedLensTypeId: initialLensTypeId,
+      selectedLensSeriesId: null,
+      lens_profile: buildLensProfileLabel(initialLensTypeId, null),
+      focal_mm: initialLensDerived.defaultFocal,
+      aperture: initialLensDerived.defaultAperture,
       lighting_style: preset.defaults.lighting,
       scene: withTaskSceneDefaults(preset),
     });
     setProWizard(baseWizard);
     setProApertureSliderValue(apertureToSliderValue(baseWizard.aperture));
+    setProLensSeriesModal(null);
     setStudioMode("pro");
     setProPromptDrawerOpen(false);
   };
@@ -777,10 +822,69 @@ export default function PromptCopilotApp() {
     });
   };
 
-  const handleProLensSelect = (lens: string) => {
+  const applyLensSelection = (input: { typeId: LensTypeId; seriesId: string | null; advanceToNextStep: boolean }) => {
+    const derived = deriveLensRecommendations({
+      typeId: input.typeId,
+      seriesId: input.seriesId,
+      availableFocals: allFocalOptions,
+    });
+
     patchWizardState({
-      lens_profile: lens,
-      step: nextProStep(2),
+      selectedLensTypeId: input.typeId,
+      selectedLensSeriesId: input.seriesId,
+      lens_profile: buildLensProfileLabel(input.typeId, input.seriesId),
+      focal_mm: derived.defaultFocal,
+      aperture: derived.defaultAperture,
+      step: input.advanceToNextStep ? nextProStep(2) : 2,
+    });
+
+    setProApertureSliderValue(apertureToSliderValue(derived.defaultAperture));
+  };
+
+  const handleProLensSelect = (lensTypeId: LensTypeId) => {
+    const currentSeries = proWizard.selectedLensTypeId === lensTypeId ? proWizard.selectedLensSeriesId : null;
+    applyLensSelection({
+      typeId: lensTypeId,
+      seriesId: currentSeries,
+      advanceToNextStep: false,
+    });
+    setProLensSeriesModal({
+      typeId: lensTypeId,
+      pendingSeriesId: currentSeries,
+    });
+  };
+
+  const handleProLensUseOnlyType = () => {
+    if (!proLensSeriesModal) {
+      return;
+    }
+
+    applyLensSelection({
+      typeId: proLensSeriesModal.typeId,
+      seriesId: null,
+      advanceToNextStep: true,
+    });
+    setProLensSeriesModal(null);
+  };
+
+  const handleProLensConfirmSeries = () => {
+    if (!proLensSeriesModal?.pendingSeriesId) {
+      return;
+    }
+
+    applyLensSelection({
+      typeId: proLensSeriesModal.typeId,
+      seriesId: proLensSeriesModal.pendingSeriesId,
+      advanceToNextStep: true,
+    });
+    setProLensSeriesModal(null);
+  };
+
+  const handleProLensEditSeries = (lensTypeId: LensTypeId) => {
+    const currentSeries = proWizard.selectedLensTypeId === lensTypeId ? proWizard.selectedLensSeriesId : null;
+    setProLensSeriesModal({
+      typeId: lensTypeId,
+      pendingSeriesId: currentSeries,
     });
   };
 
@@ -839,11 +943,23 @@ export default function PromptCopilotApp() {
   };
 
   const handleProReset = () => {
+    const defaultType = recommendLensTypeByContext({ category: selectedPreset.category, goal: selectedPreset.goal });
+    const defaultLensDerived = deriveLensRecommendations({
+      typeId: defaultType,
+      seriesId: null,
+      availableFocals: allFocalOptions,
+    });
     const reset = createDefaultProWizard({
+      selectedLensTypeId: defaultType,
+      selectedLensSeriesId: null,
+      lens_profile: buildLensProfileLabel(defaultType, null),
+      focal_mm: defaultLensDerived.defaultFocal,
+      aperture: defaultLensDerived.defaultAperture,
       scene: withTaskSceneDefaults(selectedPreset),
     });
     setProWizard(reset);
     setProApertureSliderValue(apertureToSliderValue(reset.aperture));
+    setProLensSeriesModal(null);
     setToast({ kind: "success", text: "Pro настройки сброшены" });
   };
 
@@ -871,6 +987,10 @@ export default function PromptCopilotApp() {
   };
 
   const handleProWizardKeyDown: React.KeyboardEventHandler<HTMLDivElement> = (event) => {
+    if (proLensSeriesModal) {
+      return;
+    }
+
     if (isInteractingWithControl) {
       return;
     }
@@ -1300,27 +1420,69 @@ export default function PromptCopilotApp() {
 
                         <section className="shrink-0 pr-4" style={{ width: `${proSlideWidth}%` }}>
                           <h3 className="text-sm font-semibold text-zinc-100">2. Выбери тип объектива</h3>
+                          <p className="mt-2 text-xs text-zinc-400">
+                            Сначала выбери тип, затем в модалке укажи профессиональную серию (опционально).
+                          </p>
                           <div data-testid="pro-step-lens-grid" className="mt-3 grid gap-2 sm:grid-cols-3 xl:grid-cols-4">
-                            {PRO_LENS_OPTIONS.map((lens) => (
-                              <button
-                                key={lens.label}
-                                type="button"
-                                className={`flex min-h-[132px] flex-col rounded-2xl border p-3 text-left transition ${
-                                  proWizard.lens_profile === lens.label
-                                    ? "border-white/40 bg-white/[0.11]"
-                                    : "border-white/10 bg-white/[0.03] hover:bg-white/[0.08]"
-                                }`}
-                                onClick={() => handleProLensSelect(lens.label)}
-                              >
-                                <p className="text-sm font-semibold text-zinc-100">{lens.label}</p>
-                                <p className="mt-1 text-[11px] text-zinc-400">{lens.effect}</p>
-                              </button>
-                            ))}
+                            {LENS_TYPES.map((lensType) => {
+                              const isActive = proWizard.selectedLensTypeId === lensType.id;
+                              const selectedSeries =
+                                isActive && activeLensSeries?.typeId === lensType.id ? activeLensSeries : null;
+
+                              return (
+                                <article
+                                  key={lensType.id}
+                                  data-testid={`pro-lens-type-${lensType.id}`}
+                                  className={`rounded-2xl border p-3 transition ${
+                                    isActive ? "border-white/40 bg-white/[0.11]" : "border-white/10 bg-white/[0.03]"
+                                  }`}
+                                >
+                                  <button
+                                    type="button"
+                                    className="flex min-h-[132px] w-full flex-col text-left"
+                                    onClick={() => handleProLensSelect(lensType.id)}
+                                  >
+                                    <p className="text-sm font-semibold text-zinc-100">{lensType.title}</p>
+                                    <p className="mt-1 text-[11px] text-zinc-400">{lensType.subtitle}</p>
+                                    {selectedSeries ? (
+                                      <>
+                                        <p className="mt-2 text-[11px] text-zinc-200">Серия: {selectedSeries.title}</p>
+                                        <p className="mt-1 text-[10px] text-zinc-400">Look: {selectedSeries.bias.look}</p>
+                                      </>
+                                    ) : isActive ? (
+                                      <p className="mt-2 text-[11px] text-zinc-300">Серия не выбрана (используется только тип)</p>
+                                    ) : null}
+                                    <div className="mt-auto flex flex-wrap gap-1 pt-3">
+                                      {lensType.tags.slice(0, 3).map((chip) => (
+                                        <span key={`${lensType.id}-${chip}`} className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] text-zinc-300">
+                                          {chip}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </button>
+                                  {isActive ? (
+                                    <button
+                                      type="button"
+                                      data-testid={`pro-lens-edit-series-${lensType.id}`}
+                                      className="mt-2 rounded-full border border-white/20 bg-white/[0.06] px-3 py-1 text-[11px] text-zinc-100 transition hover:bg-white/[0.12]"
+                                      onClick={() => handleProLensEditSeries(lensType.id)}
+                                    >
+                                      Изменить серию
+                                    </button>
+                                  ) : null}
+                                </article>
+                              );
+                            })}
                           </div>
                         </section>
 
                         <section className="shrink-0 pr-4" style={{ width: `${proSlideWidth}%` }}>
                           <h3 className="text-sm font-semibold text-zinc-100">3. {PRO_FOCAL_UI.title}</h3>
+                          <p className="mt-2 text-xs text-zinc-300">{proLensDerived.copyHints.focal}</p>
+                          <p className="mt-1 text-[11px] text-zinc-500">{proLensDerived.copyHints.look}</p>
+                          {proLensDerived.copyHints.flareHint ? (
+                            <p className="mt-1 text-[11px] text-amber-200/80">{proLensDerived.copyHints.flareHint}</p>
+                          ) : null}
                           <p className="mt-2 text-xs text-zinc-400">{PRO_FOCAL_UI.helperText.default}</p>
                           <div className="mt-2 grid gap-1 sm:grid-cols-2">
                             {PRO_FOCAL_UI.helperText.ranges.map((item) => (
@@ -1337,21 +1499,32 @@ export default function PromptCopilotApp() {
                               </p>
                             </div>
                           ) : null}
+                          <div className="mt-3 rounded-xl border border-sky-300/20 bg-sky-400/5 p-2.5">
+                            <p className="text-[10px] uppercase tracking-[0.14em] text-sky-200/80">Рекомендовано для объектива</p>
+                            <p className="mt-1 text-xs text-zinc-100">
+                              {proLensDerived.defaultFocal} мм — {proLensDerived.focalReason}
+                            </p>
+                          </div>
                           <div data-testid="pro-step-focal-grid" className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                            {PRO_FOCAL_UI.options.map((option) => (
+                            {proFilteredFocalOptions.map((option) => (
                               <button
                                 key={option.mm}
                                 type="button"
                                 className={`flex min-h-[132px] flex-col rounded-2xl border p-3 text-left transition ${
                                   proWizard.focal_mm === option.mm
                                     ? "border-white/40 bg-white text-zinc-950"
-                                    : "border-white/10 bg-white/[0.03] text-zinc-100 hover:bg-white/[0.08]"
+                                    : option.mm === proLensDerived.defaultFocal
+                                      ? "border-sky-300/40 bg-sky-400/[0.06] text-zinc-100 hover:bg-sky-300/[0.12]"
+                                      : "border-white/10 bg-white/[0.03] text-zinc-100 hover:bg-white/[0.08]"
                                 }`}
                                 onClick={() => handleProFocalSelect(option.mm)}
                               >
                                 <p className="text-sm font-semibold">
                                   {option.mm} мм · {option.label}
                                 </p>
+                                {option.mm === proLensDerived.defaultFocal ? (
+                                  <p className="mt-1 text-[10px] uppercase tracking-[0.12em] text-sky-200/90">Рекомендовано</p>
+                                ) : null}
                                 <p className={`mt-1 text-[11px] ${proWizard.focal_mm === option.mm ? "text-zinc-700" : "text-zinc-400"}`}>{option.description}</p>
                                 <div className="mt-auto flex flex-wrap gap-1 pt-3">
                                   {option.bestFor.slice(0, 3).map((chip) => (
@@ -1378,6 +1551,10 @@ export default function PromptCopilotApp() {
 
                         <section className="shrink-0 pr-4" style={{ width: `${proSlideWidth}%` }}>
                           <h3 className="text-sm font-semibold text-zinc-100">4. {PRO_APERTURE_UI.title}</h3>
+                          <p className="mt-2 text-xs text-zinc-300">{proLensDerived.copyHints.aperture}</p>
+                          {proLensDerived.copyHints.flareHint ? (
+                            <p className="mt-1 text-[11px] text-amber-200/80">{proLensDerived.copyHints.flareHint}</p>
+                          ) : null}
                           <p className="mt-2 text-xs text-zinc-400">{PRO_APERTURE_UI.helperText.default}</p>
                           <div className="mt-2 grid gap-1 sm:grid-cols-2">
                             {PRO_APERTURE_UI.helperText.ranges.map((item) => (
@@ -1394,6 +1571,12 @@ export default function PromptCopilotApp() {
                               </p>
                             </div>
                           ) : null}
+                          <div className="mt-3 rounded-xl border border-sky-300/20 bg-sky-400/5 p-2.5">
+                            <p className="text-[10px] uppercase tracking-[0.14em] text-sky-200/80">Рекомендовано для объектива</p>
+                            <p className="mt-1 text-xs text-zinc-100">
+                              {proLensDerived.defaultAperture} — {proLensDerived.apertureReason}
+                            </p>
+                          </div>
                           <div
                             data-testid="pro-aperture-slider-wrapper"
                             className="mt-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3 touch-none overscroll-contain"
@@ -1433,6 +1616,8 @@ export default function PromptCopilotApp() {
                                 className={`h-11 rounded-full border px-3 text-xs transition ${
                                   proWizard.aperture === aperture
                                     ? "border-white/40 bg-white text-zinc-950"
+                                    : aperture === proLensDerived.defaultAperture
+                                      ? "border-sky-300/40 bg-sky-400/[0.08] text-zinc-100 hover:bg-sky-300/[0.14]"
                                     : "border-white/10 bg-white/[0.05] text-zinc-100 hover:bg-white/[0.12]"
                                 }`}
                                 onClick={() => handleProApertureSelect(aperture)}
@@ -1936,6 +2121,98 @@ export default function PromptCopilotApp() {
             </div>
           ) : null}
         </aside>
+      ) : null}
+
+      {proLensSeriesModal && lensModalType ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-6"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) {
+              setProLensSeriesModal(null);
+            }
+          }}
+        >
+          <article
+            ref={proLensSeriesModalRef}
+            data-testid="pro-lens-series-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Выбор серии объектива"
+            tabIndex={-1}
+            className="w-full max-w-3xl rounded-3xl border border-white/15 bg-[#0d0f14] p-4"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="font-display text-2xl text-zinc-100">Выбери серию (опционально)</h3>
+                <p className="mt-1 text-xs text-zinc-400">Тип: {lensModalType.title}</p>
+                <p className="mt-1 text-xs text-zinc-500">{lensModalType.subtitle}</p>
+              </div>
+              <button
+                type="button"
+                className="rounded-full border border-white/20 px-3 py-1 text-xs text-zinc-200"
+                onClick={() => setProLensSeriesModal(null)}
+              >
+                Закрыть
+              </button>
+            </div>
+
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              <button
+                type="button"
+                data-testid="pro-lens-skip-type"
+                className="rounded-full border border-white/20 bg-white/[0.06] px-4 py-2 text-xs text-zinc-100 transition hover:bg-white/[0.12]"
+                onClick={handleProLensUseOnlyType}
+              >
+                Использовать только тип
+              </button>
+              <button
+                type="button"
+                data-testid="pro-lens-confirm-series"
+                disabled={!proLensSeriesModal.pendingSeriesId}
+                className="rounded-full bg-white px-4 py-2 text-xs font-semibold text-zinc-950 transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
+                onClick={handleProLensConfirmSeries}
+              >
+                Выбрать серию
+              </button>
+            </div>
+
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {lensModalSeries.map((series) => {
+                const isSelected = proLensSeriesModal.pendingSeriesId === series.id;
+                return (
+                  <button
+                    key={series.id}
+                    type="button"
+                    data-testid={`pro-lens-series-${series.id}`}
+                    className={`flex min-h-[132px] flex-col rounded-2xl border p-3 text-left transition ${
+                      isSelected
+                        ? "border-white/40 bg-white text-zinc-950"
+                        : "border-white/10 bg-white/[0.03] text-zinc-100 hover:bg-white/[0.08]"
+                    }`}
+                    onClick={() =>
+                      setProLensSeriesModal((current) => (current ? { ...current, pendingSeriesId: series.id } : current))
+                    }
+                  >
+                    <p className="text-sm font-semibold">{series.title}</p>
+                    <p className={`mt-1 text-[11px] ${isSelected ? "text-zinc-700" : "text-zinc-400"}`}>{series.description}</p>
+                    <div className="mt-auto flex flex-wrap gap-1 pt-3">
+                      {series.tags.slice(0, 3).map((chip) => (
+                        <span
+                          key={`${series.id}-${chip}`}
+                          className={`rounded-full px-2 py-0.5 text-[10px] ${
+                            isSelected ? "bg-zinc-900/10 text-zinc-700" : "bg-white/10 text-zinc-300"
+                          }`}
+                        >
+                          {chip}
+                        </span>
+                      ))}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </article>
+        </div>
       ) : null}
 
       {activeTab === "studio" && studioMode === "pro" ? (
