@@ -10,11 +10,17 @@ import {
   type CreatorCategory,
   GOAL_LABELS,
   STUDIO_TASK_PRESETS,
-  STUDIO_TERM_GUIDE,
   type GoalTag,
   type StudioTaskPreset,
   type TechSettings,
 } from "@/lib/studio/catalog";
+import {
+  REFERENCE_DIFFICULTY_LABELS,
+  REFERENCE_TECHNIQUES,
+  type ReferenceRulePack,
+  type ReferenceTechnique,
+  type ReferenceTechniqueDifficulty,
+} from "@/lib/studio/referenceTechniques";
 import { studioPresetCollectionSchema } from "@/lib/studio/presetSchema";
 import {
   PRO_APERTURE_UI,
@@ -66,6 +72,7 @@ type SceneDraft = {
 };
 
 type PromptMode = "compact" | "full";
+type FilterOption = "Все" | string;
 
 type PostCopyPanelState = {
   presetId: string;
@@ -177,6 +184,10 @@ function getPresetById(id: string): StudioTaskPreset {
   return VALIDATED_TASK_PRESETS.find((preset) => preset.id === id) ?? VALIDATED_TASK_PRESETS[0]!;
 }
 
+function getReferenceTechniqueById(id: string): ReferenceTechnique {
+  return REFERENCE_TECHNIQUES.find((technique) => technique.id === id) ?? REFERENCE_TECHNIQUES[0]!;
+}
+
 function makeInitialSceneDraft(preset: StudioTaskPreset): SceneDraft {
   return {
     goal: preset.sceneTemplates.goal[0] ?? "",
@@ -231,6 +242,90 @@ function setupToTech(core6: Core6Setup): TechSettings {
     aperture: core6.aperture,
     lighting: core6.lighting_style,
   };
+}
+
+function joinUniqueCommaList(current: string, additions: readonly string[]): string {
+  const existing = current
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const merged = Array.from(new Set([...existing, ...additions.map((item) => item.trim()).filter(Boolean)]));
+  return merged.join(", ");
+}
+
+function appendSentence(base: string, extra?: string): string {
+  if (!extra) {
+    return base;
+  }
+
+  const trimmedBase = base.trim();
+  const trimmedExtra = extra.trim();
+  if (!trimmedExtra) {
+    return trimmedBase;
+  }
+
+  if (!trimmedBase) {
+    return trimmedExtra;
+  }
+
+  if (trimmedBase.includes(trimmedExtra)) {
+    return trimmedBase;
+  }
+
+  return `${trimmedBase} ${trimmedExtra}`;
+}
+
+function applyTechPatchToSetup(setup: StudioSetup, patch?: Partial<TechSettings>): StudioSetup {
+  if (!patch) {
+    return setup;
+  }
+
+  const next: StudioSetup = structuredClone(setup);
+  if (patch.camera) {
+    next.core6.camera_format = patch.camera;
+  }
+  if (patch.lens_profile) {
+    next.core6.lens_type = patch.lens_profile;
+  }
+  if (typeof patch.focal_mm === "number") {
+    next.core6.focal_length_mm = patch.focal_mm;
+  }
+  if (patch.aperture) {
+    next.core6.aperture = patch.aperture;
+  }
+  if (patch.lighting) {
+    next.core6.lighting_style = patch.lighting;
+  }
+  return next;
+}
+
+function applyReferenceRulePacks(setup: StudioSetup, packs: readonly ReferenceRulePack[]): StudioSetup {
+  if (packs.length === 0) {
+    return setup;
+  }
+
+  let next: StudioSetup = structuredClone(setup);
+  for (const pack of packs) {
+    next = applyTechPatchToSetup(next, pack.techPatch);
+    next.scene_goal = appendSentence(next.scene_goal, pack.scenePatch?.goal);
+    next.scene_action = appendSentence(next.scene_action, pack.scenePatch?.action);
+    next.scene_environment = appendSentence(next.scene_environment, pack.scenePatch?.environment);
+
+    if (pack.lockedCorePatch?.character_lock) {
+      next.locked_core.character_lock = appendSentence(next.locked_core.character_lock, pack.lockedCorePatch.character_lock);
+    }
+    if (pack.lockedCorePatch?.style_lock) {
+      next.locked_core.style_lock = appendSentence(next.locked_core.style_lock, pack.lockedCorePatch.style_lock);
+    }
+    if (pack.lockedCorePatch?.composition_lock) {
+      next.locked_core.composition_lock = appendSentence(next.locked_core.composition_lock, pack.lockedCorePatch.composition_lock);
+    }
+    if (pack.negativeAdditions && pack.negativeAdditions.length > 0) {
+      next.locked_core.negative_lock = joinUniqueCommaList(next.locked_core.negative_lock, pack.negativeAdditions);
+    }
+  }
+
+  return next;
 }
 
 function renderPromptTemplate(template: string, tokens: Record<string, string>): string {
@@ -465,6 +560,13 @@ export default function PromptCopilotApp() {
 
   const [studioQuery, setStudioQuery] = useState("");
   const [studioCategoryFilter, setStudioCategoryFilter] = useState<"Все" | CreatorCategory>("Все");
+  const [referenceQuery, setReferenceQuery] = useState("");
+  const [referenceDifficultyFilter, setReferenceDifficultyFilter] = useState<"Все" | ReferenceTechniqueDifficulty>("Все");
+  const [referenceMoodFilter, setReferenceMoodFilter] = useState<FilterOption>("Все");
+  const [referenceGenreFilter, setReferenceGenreFilter] = useState<FilterOption>("Все");
+  const [referenceSectionFilter, setReferenceSectionFilter] = useState<FilterOption>("Все");
+  const [activeReferenceTechniqueId, setActiveReferenceTechniqueId] = useState<string | null>(null);
+  const [activeRulePacks, setActiveRulePacks] = useState<ReferenceRulePack[]>([]);
   const [selectedPresetId, setSelectedPresetId] = useState(starterPreset.id);
   const [sceneDraft, setSceneDraft] = useState<SceneDraft>(() => makeInitialSceneDraft(starterPreset));
   const [techOverrides, setTechOverrides] = useState<Partial<TechSettings>>({});
@@ -522,6 +624,7 @@ export default function PromptCopilotApp() {
   const postCopyPanelRef = useRef<HTMLDivElement | null>(null);
   const proPromptDrawerRef = useRef<HTMLDivElement | null>(null);
   const proLensSeriesModalRef = useRef<HTMLDivElement | null>(null);
+  const referenceTechniquePanelRef = useRef<HTMLDivElement | null>(null);
 
   const [packs, setPacks] = useState<PromptPack[]>(() => {
     if (typeof window === "undefined") {
@@ -541,7 +644,6 @@ export default function PromptCopilotApp() {
   });
 
   const [toast, setToast] = useState<{ kind: "success" | "error"; text: string } | null>(null);
-  const [activeTermId, setActiveTermId] = useState<string | null>(null);
 
   const selectedPreset = useMemo(() => getPresetById(selectedPresetId), [selectedPresetId]);
 
@@ -553,19 +655,21 @@ export default function PromptCopilotApp() {
   }, [selectedPreset.defaults, techOverrides]);
 
   const studioSetup = useMemo(() => {
-    return makeSetup({
+    const base = makeSetup({
       preset: selectedPreset,
       scene: sceneDraft,
       tech: effectiveTech,
     });
-  }, [effectiveTech, sceneDraft, selectedPreset]);
+    return applyReferenceRulePacks(base, activeRulePacks);
+  }, [activeRulePacks, effectiveTech, sceneDraft, selectedPreset]);
 
   const proSetup = useMemo(() => {
-    return buildSetupFromProWizard({
+    const base = buildSetupFromProWizard({
       preset: selectedPreset,
       wizard: proWizard,
     });
-  }, [proWizard, selectedPreset]);
+    return applyReferenceRulePacks(base, activeRulePacks);
+  }, [activeRulePacks, proWizard, selectedPreset]);
 
   const safeDefaultByCategory = useMemo(() => {
     const result: Partial<Record<CreatorCategory, string>> = {};
@@ -635,18 +739,70 @@ export default function PromptCopilotApp() {
       return searchable.includes(query);
     });
   }, [studioCategoryFilter, studioQuery]);
+  const referenceMoodOptions = useMemo(() => {
+    const values = Array.from(new Set(REFERENCE_TECHNIQUES.map((item) => item.mood)));
+    return ["Все", ...values];
+  }, []);
 
-  const activeTerm = STUDIO_TERM_GUIDE.find((item) => item.id === activeTermId) ?? null;
+  const referenceGenreOptions = useMemo(() => {
+    const values = Array.from(new Set(REFERENCE_TECHNIQUES.map((item) => item.genre)));
+    return ["Все", ...values];
+  }, []);
+
+  const referenceSectionOptions = useMemo(() => {
+    const values = Array.from(new Set(REFERENCE_TECHNIQUES.map((item) => item.section)));
+    return ["Все", ...values];
+  }, []);
+
+  const filteredReferenceTechniques = useMemo(() => {
+    const query = referenceQuery.trim().toLowerCase();
+
+    return REFERENCE_TECHNIQUES.filter((technique) => {
+      if (referenceDifficultyFilter !== "Все" && technique.difficulty !== referenceDifficultyFilter) {
+        return false;
+      }
+      if (referenceMoodFilter !== "Все" && technique.mood !== referenceMoodFilter) {
+        return false;
+      }
+      if (referenceGenreFilter !== "Все" && technique.genre !== referenceGenreFilter) {
+        return false;
+      }
+      if (referenceSectionFilter !== "Все" && technique.section !== referenceSectionFilter) {
+        return false;
+      }
+      if (!query) {
+        return true;
+      }
+
+      const searchable = [
+        technique.title,
+        technique.description,
+        technique.what,
+        technique.whenUse,
+        technique.whenAvoid,
+        technique.mood,
+        technique.genre,
+        technique.section,
+      ]
+        .join(" ")
+        .toLowerCase();
+
+      return searchable.includes(query);
+    });
+  }, [referenceDifficultyFilter, referenceGenreFilter, referenceMoodFilter, referenceQuery, referenceSectionFilter]);
+
+  const activeReferenceTechnique = activeReferenceTechniqueId ? getReferenceTechniqueById(activeReferenceTechniqueId) : null;
 
   const buildSetupForPreset = (preset: StudioTaskPreset): StudioSetup => {
     const isSelected = preset.id === selectedPreset.id;
     const scene = isSelected ? sceneDraft : makeInitialSceneDraft(preset);
     const tech = isSelected ? effectiveTech : preset.defaults;
-    return makeSetup({
+    const base = makeSetup({
       preset,
       scene,
       tech,
     });
+    return applyReferenceRulePacks(base, activeRulePacks);
   };
 
   const activeDetailsPreview = activeDetailsPreset
@@ -704,6 +860,12 @@ export default function PromptCopilotApp() {
     active: Boolean(proLensSeriesModal),
     containerRef: proLensSeriesModalRef,
     onEscape: () => setProLensSeriesModal(null),
+  });
+
+  useFocusTrap({
+    active: Boolean(activeReferenceTechnique),
+    containerRef: referenceTechniquePanelRef,
+    onEscape: () => setActiveReferenceTechniqueId(null),
   });
 
   useEffect(() => {
@@ -1147,19 +1309,62 @@ export default function PromptCopilotApp() {
     setIsInteractingWithControl(false);
   };
 
-  const applyReferenceTerm = (termId: string) => {
-    const term = STUDIO_TERM_GUIDE.find((item) => item.id === termId);
-    if (!term?.applyValue) {
-      setToast({ kind: "error", text: "Для этого термина нет автоматического применения" });
+  const applyReferenceTechnique = (technique: ReferenceTechnique) => {
+    if (technique.apply.kind === "partial-preset") {
+      const { patch } = technique.apply;
+      const preset = patch.presetId ? getPresetById(patch.presetId) : null;
+
+      if (preset) {
+        setSelectedPresetId(preset.id);
+        setSceneDraft({
+          ...makeInitialSceneDraft(preset),
+          ...patch.scenePatch,
+        });
+        setTechOverrides(patch.techPatch ?? {});
+        setStudioMode("beginner");
+      } else {
+        if (patch.scenePatch) {
+          setSceneDraft((current) => ({
+            ...current,
+            ...patch.scenePatch,
+          }));
+        }
+        if (patch.techPatch) {
+          setTechOverrides((current) => ({
+            ...current,
+            ...patch.techPatch,
+          }));
+        }
+      }
+
+      setActiveTab("studio");
+      setActiveReferenceTechniqueId(null);
+      setToast({ kind: "success", text: `Добавлено в настройки: ${technique.title}` });
       return;
     }
 
-    setTechOverrides((current) => ({
-      ...current,
-      lighting: term.applyValue,
-    }));
+    const { pack } = technique.apply;
+    const hasPack = activeRulePacks.some((item) => item.id === pack.id);
+    if (!hasPack) {
+      setActiveRulePacks((current) => [...current, pack]);
+    }
+    if (pack.techPatch) {
+      setTechOverrides((current) => ({
+        ...current,
+        ...pack.techPatch,
+      }));
+    }
+    setActiveTab("studio");
+    setActiveReferenceTechniqueId(null);
+    setToast({
+      kind: "success",
+      text: hasPack ? `Правило уже активно: ${pack.title}` : `Правило добавлено: ${pack.title}`,
+    });
+  };
 
-    setToast({ kind: "success", text: `Применено из справочника: ${term.term}` });
+  const clearReferenceRulePacks = () => {
+    setActiveRulePacks([]);
+    setToast({ kind: "success", text: "Правила из справочника очищены" });
   };
 
   const tabClass = (tab: TabKey): string =>
@@ -1214,7 +1419,7 @@ export default function PromptCopilotApp() {
               <button data-testid="tab-gallery" className={tabClass("gallery")} onClick={() => setActiveTab("gallery")}>Галерея</button>
               <button data-testid="tab-studio" className={tabClass("studio")} onClick={() => setActiveTab("studio")}>Студия</button>
               <button data-testid="tab-packs" className={tabClass("packs")} onClick={() => setActiveTab("packs")}>Наборы</button>
-              <button className={tabClass("reference")} onClick={() => setActiveTab("reference")}>Справочник</button>
+              <button data-testid="tab-reference" className={tabClass("reference")} onClick={() => setActiveTab("reference")}>Справочник</button>
               <button className="ml-2 rounded-full bg-white px-6 py-2 text-[15px] font-semibold text-[#111214]">Создать</button>
             </nav>
           </div>
@@ -1225,7 +1430,7 @@ export default function PromptCopilotApp() {
             <div className="mb-5 flex items-end justify-between gap-3">
               <div>
                 <h2 className="font-display text-3xl font-semibold tracking-tight">Галерея референсов</h2>
-                <p className="mt-1 text-sm text-zinc-500">Выбирай стиль, изучай готовый промпт и отправляй сетап в Студию.</p>
+                <p className="mt-1 text-sm text-zinc-500">Выбирай стиль, изучай готовый промпт и отправляй настройки в Студию.</p>
               </div>
               <div className="hidden rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-xs text-zinc-400 md:block">
                 {filteredGalleryPresets.length} референсов
@@ -1324,6 +1529,30 @@ export default function PromptCopilotApp() {
                   </button>
                 </div>
               </div>
+
+              {activeRulePacks.length > 0 ? (
+                <div className="mb-4 rounded-2xl border border-emerald-300/25 bg-emerald-500/10 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-emerald-200">Активные правила из справочника</p>
+                    <button
+                      type="button"
+                      data-testid="clear-reference-rules"
+                      className="rounded-full border border-emerald-300/40 bg-black/20 px-3 py-1 text-[11px] text-emerald-100 transition hover:bg-black/35"
+                      onClick={clearReferenceRulePacks}
+                    >
+                      Очистить правила
+                    </button>
+                  </div>
+                  <div className="mt-2 space-y-1.5">
+                    {activeRulePacks.map((pack) => (
+                      <div key={pack.id} className="rounded-xl border border-emerald-300/20 bg-black/25 px-3 py-2">
+                        <p className="text-xs font-medium text-emerald-100">{pack.title}</p>
+                        <p className="mt-1 text-[11px] text-emerald-100/90">{pack.summary}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
 
               {studioMode === "beginner" ? (
                 <>
@@ -2004,7 +2233,7 @@ export default function PromptCopilotApp() {
                   </div>
 
                   <aside data-testid="pro-current-setup" className="sticky top-6 hidden h-fit rounded-2xl border border-white/10 bg-[#0d0f14] p-4 xl:block">
-                    <p className="text-xs uppercase tracking-[0.16em] text-zinc-500">Текущий сетап</p>
+                    <p className="text-xs uppercase tracking-[0.16em] text-zinc-500">Текущие настройки</p>
                     <div className="mt-3 space-y-2 text-xs text-zinc-300">
                       <p>Камера: {proWizard.camera}</p>
                       <p>Объектив: {proWizard.lens_profile}</p>
@@ -2125,7 +2354,7 @@ export default function PromptCopilotApp() {
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div>
                         <p className="text-sm text-zinc-100">
-                          {pack.setup_snapshot.meta?.human_title ?? pack.setup_snapshot.preset_title ?? "Custom setup"}
+                          {pack.setup_snapshot.meta?.human_title ?? pack.setup_snapshot.preset_title ?? "Свои настройки"}
                         </p>
                         <p className="mt-1 text-xs text-zinc-500">{formatDate(pack.created_at)}</p>
                         <div className="mt-1 flex gap-1">
@@ -2189,35 +2418,113 @@ export default function PromptCopilotApp() {
         {activeTab === "reference" ? (
           <section className="mt-4 rounded-3xl border border-white/10 bg-[#07080a]/95 p-4 backdrop-blur-md md:p-6">
             <h2 className="font-display text-3xl font-semibold tracking-tight">Справочник</h2>
-            <p className="mt-1 text-sm text-zinc-400">Контекстная помощь по ключевым терминам и быстрым применениям.</p>
+            <p className="mt-1 text-sm text-zinc-400">
+              Библиотека техник и стилей: фильтруйте, читайте детали и добавляйте в настройки Студии в один клик.
+            </p>
 
-            <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {STUDIO_TERM_GUIDE.map((term) => (
-                <article key={term.id} className="rounded-2xl border border-white/10 bg-[#0d0e12] p-4">
-                  <p className="text-sm font-semibold text-zinc-100">{term.term}</p>
-                  <p className="mt-2 text-xs text-zinc-400">Что это: {term.what}</p>
-                  <p className="mt-1 text-xs text-zinc-400">Влияние: {term.impact}</p>
-                  <p className="mt-1 text-xs text-zinc-400">Когда использовать: {term.when}</p>
-                  <p className="mt-2 rounded-lg bg-white/10 px-2 py-1 text-[11px] text-zinc-200">{term.microcopy}</p>
-                  <div className="mt-3 flex gap-2">
-                    <button
-                      type="button"
-                      className="rounded-full border border-white/20 bg-white/[0.06] px-3 py-1 text-xs text-zinc-100"
-                      onClick={() => applyReferenceTerm(term.id)}
-                    >
-                      Применить
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded-full border border-white/20 bg-white/[0.06] px-3 py-1 text-xs text-zinc-100"
-                      onClick={() => setActiveTermId(term.id)}
-                    >
-                      Подробнее
-                    </button>
+            <div className="mt-4 grid gap-3 rounded-2xl border border-white/10 bg-[#0d0e12] p-3 md:grid-cols-2 xl:grid-cols-5">
+              <label className="xl:col-span-2">
+                <span className="mb-1 block text-xs uppercase tracking-[0.14em] text-zinc-500">Поиск</span>
+                <input
+                  type="search"
+                  data-testid="reference-search"
+                  className="w-full rounded-xl border border-white/10 bg-[#090a0d] px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-white/30"
+                  placeholder="Название или описание"
+                  value={referenceQuery}
+                  onChange={(event) => setReferenceQuery(event.target.value)}
+                />
+              </label>
+              <label>
+                <span className="mb-1 block text-xs uppercase tracking-[0.14em] text-zinc-500">Сложность</span>
+                <select
+                  className="w-full rounded-xl border border-white/10 bg-[#090a0d] px-3 py-2 text-sm text-zinc-100 outline-none"
+                  value={referenceDifficultyFilter}
+                  onChange={(event) => setReferenceDifficultyFilter(event.target.value as "Все" | ReferenceTechniqueDifficulty)}
+                >
+                  <option value="Все">Все</option>
+                  <option value="easy">Просто</option>
+                  <option value="medium">Средне</option>
+                  <option value="pro">Pro</option>
+                </select>
+              </label>
+              <label>
+                <span className="mb-1 block text-xs uppercase tracking-[0.14em] text-zinc-500">Настроение</span>
+                <select
+                  className="w-full rounded-xl border border-white/10 bg-[#090a0d] px-3 py-2 text-sm text-zinc-100 outline-none"
+                  value={referenceMoodFilter}
+                  onChange={(event) => setReferenceMoodFilter(event.target.value)}
+                >
+                  {referenceMoodOptions.map((item) => (
+                    <option key={`mood-${item}`} value={item}>
+                      {item}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span className="mb-1 block text-xs uppercase tracking-[0.14em] text-zinc-500">Жанр</span>
+                <select
+                  className="w-full rounded-xl border border-white/10 bg-[#090a0d] px-3 py-2 text-sm text-zinc-100 outline-none"
+                  value={referenceGenreFilter}
+                  onChange={(event) => setReferenceGenreFilter(event.target.value)}
+                >
+                  {referenceGenreOptions.map((item) => (
+                    <option key={`genre-${item}`} value={item}>
+                      {item}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span className="mb-1 block text-xs uppercase tracking-[0.14em] text-zinc-500">Раздел</span>
+                <select
+                  className="w-full rounded-xl border border-white/10 bg-[#090a0d] px-3 py-2 text-sm text-zinc-100 outline-none"
+                  value={referenceSectionFilter}
+                  onChange={(event) => setReferenceSectionFilter(event.target.value)}
+                >
+                  {referenceSectionOptions.map((item) => (
+                    <option key={`section-${item}`} value={item}>
+                      {item}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <div className="mt-4 flex items-center justify-between text-xs text-zinc-400">
+              <span>{filteredReferenceTechniques.length} техник</span>
+              <span>Сложность: Просто / Средне / Pro</span>
+            </div>
+
+            <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {filteredReferenceTechniques.map((technique) => (
+                <article key={technique.id} className="rounded-2xl border border-white/10 bg-[#0d0e12] p-4" data-testid="reference-card">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm font-semibold text-zinc-100">{technique.title}</p>
+                    <span className="rounded-full border border-white/20 bg-white/[0.06] px-2 py-0.5 text-[10px] text-zinc-200">
+                      {REFERENCE_DIFFICULTY_LABELS[technique.difficulty]}
+                    </span>
                   </div>
+                  <p className="mt-2 text-xs text-zinc-400">{technique.description}</p>
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] text-zinc-300">{technique.mood}</span>
+                    <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] text-zinc-300">{technique.genre}</span>
+                    <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] text-zinc-300">{technique.section}</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="mt-3 w-full rounded-full border border-white/20 bg-white/[0.06] px-3 py-2 text-xs text-zinc-100 transition hover:bg-white/[0.14]"
+                    onClick={() => setActiveReferenceTechniqueId(technique.id)}
+                  >
+                    Открыть карточку
+                  </button>
                 </article>
               ))}
             </div>
+
+            {filteredReferenceTechniques.length === 0 ? (
+              <p className="mt-4 text-sm text-zinc-400">По этим фильтрам пока ничего нет. Попробуйте ослабить условия.</p>
+            ) : null}
           </section>
         ) : null}
       </div>
@@ -2508,7 +2815,7 @@ export default function PromptCopilotApp() {
 
       {activeTab === "studio" && studioMode === "pro" ? (
         <aside className="fixed inset-x-3 bottom-3 z-40 rounded-2xl border border-white/15 bg-[#0d0f14]/95 p-3 shadow-[0_20px_45px_rgba(0,0,0,0.5)] backdrop-blur-xl xl:hidden">
-          <p className="text-[11px] text-zinc-400">Текущий сетап: {proWizard.camera} • {proWizard.lens_profile} • {proWizard.focal_mm} мм</p>
+          <p className="text-[11px] text-zinc-400">Текущие настройки: {proWizard.camera} • {proWizard.lens_profile} • {proWizard.focal_mm} мм</p>
           <div className="mt-2 grid grid-cols-3 gap-2">
             <button
               type="button"
@@ -2751,26 +3058,68 @@ export default function PromptCopilotApp() {
         </div>
       ) : null}
 
-      {activeTerm ? (
+      {activeReferenceTechnique ? (
         <div
           className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 px-4 py-6"
+          data-testid="reference-technique-modal"
           onClick={(event) => {
             if (event.target === event.currentTarget) {
-              setActiveTermId(null);
+              setActiveReferenceTechniqueId(null);
             }
           }}
         >
-          <article className="w-full max-w-xl rounded-2xl border border-white/15 bg-[#0d0f14] p-4">
+          <article
+            ref={referenceTechniquePanelRef}
+            className="w-full max-w-2xl rounded-2xl border border-white/15 bg-[#0d0f14] p-4"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Карточка техники"
+            tabIndex={-1}
+          >
             <div className="flex items-start justify-between gap-3">
-              <h4 className="font-display text-xl text-zinc-100">{activeTerm.term}</h4>
-              <button className="rounded-full border border-white/20 px-3 py-1 text-xs text-zinc-200" onClick={() => setActiveTermId(null)}>
+              <div>
+                <h4 className="font-display text-2xl text-zinc-100">{activeReferenceTechnique.title}</h4>
+                <p className="mt-1 text-xs text-zinc-400">{activeReferenceTechnique.description}</p>
+              </div>
+              <button
+                className="rounded-full border border-white/20 px-3 py-1 text-xs text-zinc-200"
+                onClick={() => setActiveReferenceTechniqueId(null)}
+              >
                 Закрыть
               </button>
             </div>
-            <p className="mt-2 text-sm text-zinc-300">{activeTerm.what}</p>
-            <p className="mt-1 text-xs text-zinc-400">Влияние: {activeTerm.impact}</p>
-            <p className="mt-1 text-xs text-zinc-400">Когда использовать: {activeTerm.when}</p>
-            <p className="mt-2 rounded-lg bg-white/10 px-2 py-1 text-[11px] text-zinc-200">{activeTerm.microcopy}</p>
+
+            <div className="mt-4 grid gap-3 text-sm text-zinc-300">
+              <div className="rounded-xl border border-white/10 bg-[#0a0c10] p-3">
+                <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">1) Что это</p>
+                <p className="mt-1">{activeReferenceTechnique.what}</p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-[#0a0c10] p-3">
+                <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">2) Когда использовать</p>
+                <p className="mt-1">{activeReferenceTechnique.whenUse}</p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-[#0a0c10] p-3">
+                <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">3) Когда не стоит</p>
+                <p className="mt-1">{activeReferenceTechnique.whenAvoid}</p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-[#0a0c10] p-3">
+                <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">4) Что изменится в настройках</p>
+                <ul className="mt-1 space-y-1">
+                  {activeReferenceTechnique.settingChanges.map((item) => (
+                    <li key={item}>• {item}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              data-testid="reference-apply-technique"
+              className="mt-4 w-full rounded-full bg-white px-4 py-2 text-sm font-semibold text-zinc-950 transition hover:bg-zinc-200"
+              onClick={() => applyReferenceTechnique(activeReferenceTechnique)}
+            >
+              Добавить в настройки
+            </button>
           </article>
         </div>
       ) : null}

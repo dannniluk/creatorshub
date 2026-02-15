@@ -72,6 +72,32 @@ test("gallery modal closes by backdrop click", async ({ page }) => {
   await expect(page.getByTestId("gallery-modal")).toHaveCount(0);
 });
 
+test("reference library applies rule-pack into studio settings", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.clear();
+  });
+
+  await page.goto("/");
+  await page.getByTestId("tab-reference").click();
+
+  await expect(page.getByRole("heading", { name: "Справочник" })).toBeVisible();
+  await page.getByTestId("reference-search").fill("фокус на лице");
+  await page.locator('[data-testid="reference-card"]').filter({ hasText: "Фокус на лице, фон мягче" }).getByRole("button", { name: "Открыть карточку" }).click();
+
+  await expect(page.getByTestId("reference-technique-modal")).toBeVisible();
+  await expect(page.getByText("1) Что это")).toBeVisible();
+  await expect(page.getByText("4) Что изменится в настройках")).toBeVisible();
+
+  await page.getByTestId("reference-apply-technique").click();
+
+  await expect(page.getByTestId("tab-studio")).toBeVisible();
+  await expect(page.getByText("Активные правила из справочника")).toBeVisible();
+  await expect(page.getByText("Акцент на лице", { exact: true })).toBeVisible();
+
+  await page.getByTestId("clear-reference-rules").click();
+  await expect(page.getByText("Активные правила из справочника")).toHaveCount(0);
+});
+
 test("pro aperture slider does not auto-advance and uses explicit next/back controls", async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.clear();
