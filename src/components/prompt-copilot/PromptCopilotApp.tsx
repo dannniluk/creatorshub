@@ -1985,7 +1985,7 @@ export default function PromptCopilotApp() {
                             savedCameraLabels={savedCameraLabels}
                             onToggleSelectedCameraSave={handleToggleSavedCamera}
                             onCameraSelect={handleProCameraSelect}
-                            onJumpToStep={(step) => goToProStep(step <= proWizard.step ? step : proWizard.step)}
+                            onJumpToStep={goToProStep}
                           />
                         </section>
 

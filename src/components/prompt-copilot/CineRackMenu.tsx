@@ -27,70 +27,46 @@ const FILTERS: Array<{ key: CineRackCameraFilter; label: string }> = [
 ];
 
 const CAMERA_TONE_BY_CATEGORY: Record<string, string> = {
-  People: "from-[#59627a] to-[#2a2f3d]",
-  Product: "from-[#65706f] to-[#2b3433]",
-  Fashion: "from-[#6b6258] to-[#312c27]",
-  Interiors: "from-[#62686f] to-[#2c3037]",
+  People: "from-[#59627a]/80 to-[#2a2f3d]/75",
+  Product: "from-[#65706f]/80 to-[#2b3433]/75",
+  Fashion: "from-[#6b6258]/80 to-[#312c27]/75",
+  Interiors: "from-[#62686f]/80 to-[#2c3037]/75",
 };
 
-function CameraIcon(): JSX.Element {
-  return (
-    <svg viewBox="0 0 96 66" className="h-12 w-16 drop-shadow-[0_8px_14px_rgba(0,0,0,0.45)]" aria-hidden="true">
-      <rect x="9" y="19" width="78" height="36" rx="10" fill="#2b2f37" />
-      <rect x="12" y="22" width="72" height="29" rx="8" fill="#3d434f" opacity="0.55" />
-      <rect x="22" y="13" width="20" height="9" rx="3" fill="#4f5766" />
-      <rect x="24" y="15" width="9" height="5" rx="2" fill="#677184" opacity="0.75" />
-      <circle cx="56" cy="37" r="15" fill="#1a1e25" />
-      <circle cx="56" cy="37" r="12" fill="#646f83" opacity="0.9" />
-      <circle cx="56" cy="37" r="8.5" fill="#202730" />
-      <circle cx="56" cy="37" r="4.5" fill="#0f1319" />
-      <circle cx="59" cy="34" r="2.2" fill="#c6d3e9" opacity="0.85" />
-      <rect x="72" y="27" width="8" height="4" rx="2" fill="#848ea2" opacity="0.65" />
-    </svg>
-  );
+const SUMMARY_IMAGES = {
+  lens: "/camera-icons/rack-lens.jpg",
+  focal: "/camera-icons/rack-focal.jpg",
+  aperture: "/camera-icons/rack-aperture.jpg",
+} as const;
+
+function getCameraImage(label: string): string {
+  const normalized = label.toLowerCase();
+
+  if (normalized.includes("arri") || normalized.includes("blackmagic") || normalized.includes("cinema")) {
+    return "/camera-icons/rack-camera-cinema.jpg";
+  }
+
+  if (normalized.includes("red") || normalized.includes("v-raptor") || normalized.includes("12k")) {
+    return "/camera-icons/rack-camera-pro.jpg";
+  }
+
+  if (normalized.includes("hasselblad") || normalized.includes("gfx") || normalized.includes("fujifilm")) {
+    return "/camera-icons/rack-camera-pro.jpg";
+  }
+
+  if (normalized.includes("sony") || normalized.includes("nikon") || normalized.includes("canon") || normalized.includes("iphone")) {
+    return "/camera-icons/rack-camera-mirrorless.jpg";
+  }
+
+  return "/camera-icons/rack-camera-digital.jpg";
 }
 
-function LensIcon(): JSX.Element {
+function MetricPreview(props: { src: string; alt: string }): JSX.Element {
   return (
-    <svg viewBox="0 0 96 66" className="h-12 w-16 drop-shadow-[0_8px_14px_rgba(0,0,0,0.45)]" aria-hidden="true">
-      <ellipse cx="25" cy="33" rx="11" ry="15" fill="#5a6373" />
-      <rect x="24" y="18" width="40" height="30" rx="7" fill="#323844" />
-      <rect x="34" y="18" width="8" height="30" fill="#5f6a7d" opacity="0.45" />
-      <rect x="50" y="18" width="7" height="30" fill="#697589" opacity="0.35" />
-      <ellipse cx="64" cy="33" rx="16" ry="17" fill="#6c778c" />
-      <ellipse cx="64" cy="33" rx="12" ry="13" fill="#242a33" />
-      <ellipse cx="64" cy="33" rx="6" ry="7" fill="#0e1319" />
-      <ellipse cx="68" cy="29" rx="2" ry="2" fill="#d6e2f8" opacity="0.8" />
-    </svg>
-  );
-}
-
-function FocusIcon(): JSX.Element {
-  return (
-    <svg viewBox="0 0 96 66" className="h-12 w-16 drop-shadow-[0_8px_14px_rgba(0,0,0,0.45)]" aria-hidden="true">
-      <circle cx="48" cy="33" r="21" fill="#2d323c" />
-      <circle cx="48" cy="33" r="17" fill="#5d6678" opacity="0.72" />
-      <circle cx="48" cy="33" r="12" fill="#1a2028" />
-      <circle cx="48" cy="33" r="7" fill="#0e1218" />
-      <path d="M48 12V18" stroke="#9da8bf" strokeWidth="2" strokeLinecap="round" opacity="0.75" />
-      <path d="M48 48V54" stroke="#9da8bf" strokeWidth="2" strokeLinecap="round" opacity="0.75" />
-      <path d="M27 33H21" stroke="#9da8bf" strokeWidth="2" strokeLinecap="round" opacity="0.75" />
-      <path d="M75 33H69" stroke="#9da8bf" strokeWidth="2" strokeLinecap="round" opacity="0.75" />
-    </svg>
-  );
-}
-
-function ApertureIcon(): JSX.Element {
-  return (
-    <svg viewBox="0 0 96 66" className="h-12 w-16 drop-shadow-[0_8px_14px_rgba(0,0,0,0.45)]" aria-hidden="true">
-      <circle cx="48" cy="33" r="20" fill="#646d7f" />
-      <circle cx="48" cy="33" r="16" fill="#2b313b" />
-      <path d="M48 19L57 25L52 33L40 33L39 24Z" fill="#7c8598" opacity="0.8" />
-      <path d="M39 24L40 33L32 42L27 33L31 24Z" fill="#646d7f" opacity="0.85" />
-      <path d="M32 42L40 33L52 33L55 43L46 48Z" fill="#8892a6" opacity="0.75" />
-      <path d="M55 43L52 33L57 25L68 28L65 39Z" fill="#737c90" opacity="0.8" />
-      <circle cx="48" cy="33" r="6" fill="#0f1319" />
-    </svg>
+    <span className="relative block h-16 w-32 overflow-hidden rounded-xl border border-white/10 bg-black/30">
+      <img src={props.src} alt={props.alt} className="h-full w-full object-cover" loading="lazy" />
+      <span className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/35" />
+    </span>
   );
 }
 
@@ -119,7 +95,7 @@ export default function CineRackMenu(props: CineRackMenuProps): JSX.Element {
       data-testid="pro-cine-rack"
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <nav className="flex flex-wrap items-center gap-2">
+        <nav className="flex flex-wrap items-center gap-2" data-testid="cine-rack-filters">
           {FILTERS.map((item) => (
             <button
               key={item.key}
@@ -138,6 +114,7 @@ export default function CineRackMenu(props: CineRackMenuProps): JSX.Element {
 
         <button
           type="button"
+          data-testid="cine-rack-save-setup"
           className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/[0.06] px-4 py-2 text-sm text-zinc-100 transition hover:bg-white/[0.14]"
           onClick={props.onToggleSelectedCameraSave}
         >
@@ -149,48 +126,52 @@ export default function CineRackMenu(props: CineRackMenuProps): JSX.Element {
       <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
         <button
           type="button"
+          data-testid="cine-rack-jump-camera"
           className="rounded-2xl border border-white/12 bg-white/[0.05] p-3 text-left transition hover:bg-white/[0.12]"
           onClick={() => props.onJumpToStep(1)}
         >
           <p className="text-[11px] uppercase tracking-[0.16em] text-zinc-400">Camera</p>
-          <div className="mt-2 flex items-center justify-between gap-2">
-            <CameraIcon />
-            <p className="max-w-[62%] text-right text-sm font-semibold text-zinc-100">{props.selectedCamera}</p>
+          <div className="mt-2 flex items-center justify-between gap-3">
+            <MetricPreview src={getCameraImage(props.selectedCamera)} alt={`Camera ${props.selectedCamera}`} />
+            <p className="max-w-[50%] text-right text-sm font-semibold text-zinc-100">{props.selectedCamera}</p>
           </div>
         </button>
 
         <button
           type="button"
+          data-testid="cine-rack-jump-lens"
           className="rounded-2xl border border-white/12 bg-white/[0.05] p-3 text-left transition hover:bg-white/[0.12]"
           onClick={() => props.onJumpToStep(2)}
         >
           <p className="text-[11px] uppercase tracking-[0.16em] text-zinc-400">Lens</p>
-          <div className="mt-2 flex items-center justify-between gap-2">
-            <LensIcon />
-            <p className="max-w-[62%] text-right text-sm font-semibold text-zinc-100">{lensShort}</p>
+          <div className="mt-2 flex items-center justify-between gap-3">
+            <MetricPreview src={SUMMARY_IMAGES.lens} alt="Lens" />
+            <p className="max-w-[50%] text-right text-sm font-semibold text-zinc-100">{lensShort}</p>
           </div>
         </button>
 
         <button
           type="button"
+          data-testid="cine-rack-jump-focal"
           className="rounded-2xl border border-white/12 bg-white/[0.05] p-3 text-left transition hover:bg-white/[0.12]"
           onClick={() => props.onJumpToStep(3)}
         >
           <p className="text-[11px] uppercase tracking-[0.16em] text-zinc-400">Focal Length</p>
-          <div className="mt-2 flex items-center justify-between gap-2">
-            <FocusIcon />
+          <div className="mt-2 flex items-center justify-between gap-3">
+            <MetricPreview src={SUMMARY_IMAGES.focal} alt="Focal Length" />
             <p className="text-2xl font-semibold text-zinc-100">{props.selectedFocal} mm</p>
           </div>
         </button>
 
         <button
           type="button"
+          data-testid="cine-rack-jump-aperture"
           className="rounded-2xl border border-white/12 bg-white/[0.05] p-3 text-left transition hover:bg-white/[0.12]"
           onClick={() => props.onJumpToStep(4)}
         >
           <p className="text-[11px] uppercase tracking-[0.16em] text-zinc-400">Aperture</p>
-          <div className="mt-2 flex items-center justify-between gap-2">
-            <ApertureIcon />
+          <div className="mt-2 flex items-center justify-between gap-3">
+            <MetricPreview src={SUMMARY_IMAGES.aperture} alt="Aperture" />
             <p className="text-2xl font-semibold text-zinc-100">{props.selectedAperture}</p>
           </div>
         </button>
@@ -201,7 +182,7 @@ export default function CineRackMenu(props: CineRackMenuProps): JSX.Element {
           const isSelected = props.selectedCamera === camera.label;
           const isRecommended = recommendedSet.has(camera.label);
           const isSaved = savedSet.has(camera.label);
-          const tone = CAMERA_TONE_BY_CATEGORY[camera.category] ?? "from-[#626a7a] to-[#313847]";
+          const tone = CAMERA_TONE_BY_CATEGORY[camera.category] ?? "from-[#626a7a]/80 to-[#313847]/75";
 
           return (
             <button
@@ -214,8 +195,9 @@ export default function CineRackMenu(props: CineRackMenuProps): JSX.Element {
               }`}
               onClick={() => props.onCameraSelect(camera.label)}
             >
-              <div className={`rounded-xl bg-gradient-to-br ${tone} p-2`}>
-                <CameraIcon />
+              <div className="relative overflow-hidden rounded-xl border border-white/10">
+                <img src={getCameraImage(camera.label)} alt={`Camera ${camera.label}`} className="h-24 w-full object-cover" loading="lazy" />
+                <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${tone}`} />
               </div>
 
               <p className="mt-2 text-sm font-semibold text-zinc-100">{camera.label}</p>

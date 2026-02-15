@@ -172,3 +172,41 @@ test("pro lens type supports optional series and filters focal options", async (
   await expect(page.getByTestId("pro-step-focal-grid").getByText("105 мм")).toBeVisible();
   await expect(page.getByText(/Telephoto Prime: рекомендовано 105 мм/)).toBeVisible();
 });
+
+test("cine rack quick cards navigate to lens and focal steps", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.clear();
+  });
+
+  await page.goto("/");
+  await page.getByTestId("tab-studio").click();
+  await page.getByRole("button", { name: "Pro режим" }).click();
+  await page.getByTestId("pro-step0-category-product_packshot").click();
+  await page.getByTestId("pro-step0-channel-ecom_site").click();
+  await page.getByTestId("pro-step0-goal-label_legibility").click();
+  await page.getByTestId("pro-step0-subject").fill("Бутылка крема");
+  await page.getByTestId("pro-step0-next").click();
+
+  await expect(page.getByText("Шаг 1 / 6")).toBeVisible();
+  await page.getByTestId("cine-rack-jump-lens").click();
+  await expect(page.getByText("Шаг 2 / 6")).toBeVisible();
+});
+
+test("cine rack focal quick card jumps from camera step to focal step", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.clear();
+  });
+
+  await page.goto("/");
+  await page.getByTestId("tab-studio").click();
+  await page.getByRole("button", { name: "Pro режим" }).click();
+  await page.getByTestId("pro-step0-category-product_packshot").click();
+  await page.getByTestId("pro-step0-channel-ecom_site").click();
+  await page.getByTestId("pro-step0-goal-label_legibility").click();
+  await page.getByTestId("pro-step0-subject").fill("Бутылка крема");
+  await page.getByTestId("pro-step0-next").click();
+
+  await expect(page.getByText("Шаг 1 / 6")).toBeVisible();
+  await page.getByTestId("cine-rack-jump-focal").click();
+  await expect(page.getByText("Шаг 3 / 6")).toBeVisible();
+});
