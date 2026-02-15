@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import CineRackMenu from "@/components/prompt-copilot/CineRackMenu";
 import { generatePromptPack } from "@/lib/studio/generatePromptPack";
+import { filterCineRackCameras, getRecommendedCameraLabels, type CineRackCameraFilter } from "@/lib/studio/cineRack";
 import { DEFAULT_GALLERY_PRESETS } from "@/lib/studio/presets";
 import {
   BEGINNER_CATEGORIES,
@@ -90,6 +92,8 @@ const STORAGE_KEYS = {
   onboardingDismissed: "prompt-copilot/cinema/onboarding-dismissed",
   studioMode: "prompt-copilot/cinema/studio-mode",
   proWizard: "prompt-copilot/cinema/pro-wizard",
+  cameraRackFilter: "prompt-copilot/cinema/camera-rack-filter",
+  savedCameras: "prompt-copilot/cinema/saved-cameras",
 };
 
 const GALLERY_CHUNK_SIZE = 8;
@@ -604,6 +608,25 @@ export default function PromptCopilotApp() {
 
     return restored;
   });
+  const [cameraRackFilter, setCameraRackFilter] = useState<CineRackCameraFilter>(() => {
+    if (typeof window === "undefined") {
+      return "all";
+    }
+
+    const stored = safeParse<CineRackCameraFilter>(localStorage.getItem(STORAGE_KEYS.cameraRackFilter));
+    return stored === "recommended" || stored === "saved" ? stored : "all";
+  });
+  const [savedCameraLabels, setSavedCameraLabels] = useState<string[]>(() => {
+    if (typeof window === "undefined") {
+      return [];
+    }
+
+    const stored = safeParse<string[]>(localStorage.getItem(STORAGE_KEYS.savedCameras));
+    if (!Array.isArray(stored)) {
+      return [];
+    }
+    return stored.filter((item): item is string => typeof item === "string");
+  });
   const [proPromptDrawerOpen, setProPromptDrawerOpen] = useState(false);
   const [proPromptMode, setProPromptMode] = useState<PromptMode>("compact");
   const [proAdvancedOpen, setProAdvancedOpen] = useState(false);
@@ -837,6 +860,24 @@ export default function PromptCopilotApp() {
     category: selectedPreset.category,
     goal: selectedPreset.goal,
   });
+  const recommendedCameraLabels = useMemo(
+    () =>
+      getRecommendedCameraLabels({
+        categoryId: proWizard.step0.categoryId,
+        primaryGoalId: proWizard.step0.primaryGoalId,
+      }),
+    [proWizard.step0.categoryId, proWizard.step0.primaryGoalId],
+  );
+  const visibleProCameraOptions = useMemo(
+    () =>
+      filterCineRackCameras({
+        cameras: PRO_CAMERA_OPTIONS,
+        filter: cameraRackFilter,
+        recommendedLabels: recommendedCameraLabels,
+        savedLabels: savedCameraLabels,
+      }),
+    [cameraRackFilter, recommendedCameraLabels, savedCameraLabels],
+  );
 
   useFocusTrap({
     active: Boolean(activeDetailsPreset),
@@ -883,6 +924,14 @@ export default function PromptCopilotApp() {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.proWizard, JSON.stringify(proWizard));
   }, [proWizard]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.cameraRackFilter, JSON.stringify(cameraRackFilter));
+  }, [cameraRackFilter]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.savedCameras, JSON.stringify(savedCameraLabels));
+  }, [savedCameraLabels]);
 
   useEffect(() => {
     if (!toast) {
@@ -1092,6 +1141,17 @@ export default function PromptCopilotApp() {
     patchWizardState({
       camera,
       step: nextProStep(1),
+    });
+  };
+
+  const handleToggleSavedCamera = () => {
+    setSavedCameraLabels((current) => {
+      if (current.includes(proWizard.camera)) {
+        setToast({ kind: "success", text: `Удалено из Saved: ${proWizard.camera}` });
+        return current.filter((item) => item !== proWizard.camera);
+      }
+      setToast({ kind: "success", text: `Добавлено в Saved: ${proWizard.camera}` });
+      return [...current, proWizard.camera];
     });
   };
 
@@ -1912,30 +1972,21 @@ export default function PromptCopilotApp() {
 
                         <section className="shrink-0 pr-4" style={{ width: `${proSlideWidth}%` }}>
                           <h3 className="text-sm font-semibold text-zinc-100">1. Выбери камеру</h3>
-                          <div data-testid="pro-step-camera-grid" className="mt-3 grid gap-2 sm:grid-cols-3 xl:grid-cols-4">
-                            {PRO_CAMERA_OPTIONS.map((camera) => (
-                              <button
-                                key={camera.label}
-                                type="button"
-                                className={`flex min-h-[132px] flex-col rounded-2xl border p-3 text-left transition ${
-                                  proWizard.camera === camera.label
-                                    ? "border-white/40 bg-white/[0.11]"
-                                    : "border-white/10 bg-white/[0.03] hover:bg-white/[0.08]"
-                                }`}
-                                onClick={() => handleProCameraSelect(camera.label)}
-                              >
-                                <p className="text-sm font-semibold text-zinc-100">{camera.label}</p>
-                                <p className="mt-1 text-[11px] text-zinc-400">{camera.bestFor}</p>
-                                <div className="mt-auto flex flex-wrap gap-1 pt-3">
-                                  {camera.chips.map((chip) => (
-                                    <span key={`${camera.label}-${chip}`} className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] text-zinc-300">
-                                      {chip}
-                                    </span>
-                                  ))}
-                                </div>
-                              </button>
-                            ))}
-                          </div>
+                          <p className="mt-2 text-xs text-zinc-400">Выбери камеру или используй фильтр Recommended/Saved для быстрого выбора.</p>
+                          <CineRackMenu
+                            filter={cameraRackFilter}
+                            onFilterChange={setCameraRackFilter}
+                            cameras={visibleProCameraOptions}
+                            selectedCamera={proWizard.camera}
+                            selectedLens={proWizard.lens_profile}
+                            selectedFocal={proWizard.focal_mm}
+                            selectedAperture={proWizard.aperture}
+                            recommendedCameraLabels={recommendedCameraLabels}
+                            savedCameraLabels={savedCameraLabels}
+                            onToggleSelectedCameraSave={handleToggleSavedCamera}
+                            onCameraSelect={handleProCameraSelect}
+                            onJumpToStep={(step) => goToProStep(step <= proWizard.step ? step : proWizard.step)}
+                          />
                         </section>
 
                         <section className="shrink-0 pr-4" style={{ width: `${proSlideWidth}%` }}>
